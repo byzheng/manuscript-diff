@@ -87,6 +87,7 @@ function renderJobPage(jobId, pollFallbackMs) {
     <section class="tab-panel" id="panel-secondary">
       <label for="secondary-input">Secondary text</label>
       <textarea id="secondary-input" class="secondary-input" spellcheck="false"></textarea>
+      <div id="secondary-sync-status" class="sync-status">Synced</div>
       <div class="controls inline-controls">
         <button id="apply-secondary-btn" type="button">Apply Secondary Text</button>
       </div>

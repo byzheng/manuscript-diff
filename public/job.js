@@ -17,6 +17,7 @@ const paragraphListEl = document.getElementById("primary-paragraphs");
 const paragraphSearchInputEl = document.getElementById("paragraph-search-input");
 const paragraphSearchBtn = document.getElementById("paragraph-search-btn");
 const secondaryInputEl = document.getElementById("secondary-input");
+const secondarySyncStatusEl = document.getElementById("secondary-sync-status");
 const diffWrapEl = document.getElementById("diff-wrap");
 
 const tabButtons = Array.from(document.querySelectorAll(".tab-btn"));
@@ -31,6 +32,62 @@ let activeTab = "primary";
 let lastSearchTerm = "";
 let lastSearchIndex = -1;
 let secondaryAutoTimer = null;
+const editorStorageKey = `manuscript-diff:${jobId}:editor`;
+
+function loadPersistedEditorState() {
+  try {
+    const raw = window.localStorage.getItem(editorStorageKey);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+
+    return parsed;
+  } catch (_error) {
+    return {};
+  }
+}
+
+function patchPersistedEditorState(patch) {
+  try {
+    const current = loadPersistedEditorState();
+    const next = { ...current, ...patch };
+    window.localStorage.setItem(editorStorageKey, JSON.stringify(next));
+  } catch (_error) {
+    // Ignore local storage write failures.
+  }
+}
+
+async function restorePersistedEditorState() {
+  const saved = loadPersistedEditorState();
+
+  if (Number.isInteger(saved.startParagraph) && (!editorState || saved.startParagraph !== editorState.startParagraph)) {
+    try {
+      await setStartParagraph(saved.startParagraph, { openCompareTab: false });
+    } catch (_error) {
+      // Ignore invalid stale paragraph index.
+    }
+  }
+
+  if (typeof saved.secondaryText === "string") {
+    secondaryInputEl.value = saved.secondaryText;
+    if (!editorState || saved.secondaryText !== (editorState.secondaryText || "")) {
+      setSecondarySyncStatus("Restored draft. Auto-updating...", "busy");
+      await applySecondaryText({ openCompareTab: false, silent: true });
+    } else {
+      setSecondarySyncStatus("Synced", "ok");
+    }
+  }
+}
+
+function setSecondarySyncStatus(text, type) {
+  secondarySyncStatusEl.textContent = text;
+  secondarySyncStatusEl.className = `sync-status ${type || ""}`.trim();
+}
 
 function escapeHtml(text) {
   return String(text)
@@ -134,6 +191,7 @@ function renderState(state) {
 
   if (document.activeElement !== secondaryInputEl) {
     secondaryInputEl.value = state.secondaryText || "";
+    setSecondarySyncStatus("Synced", "ok");
   }
 
   renderParagraphs(state);
@@ -187,6 +245,7 @@ async function setStartParagraph(index, options = {}) {
   });
 
   renderState(data.state);
+  patchPersistedEditorState({ startParagraph: data.state.startParagraph });
   if (openCompareTab) {
     setActiveTab("compare");
   }
@@ -234,11 +293,13 @@ async function applySecondaryText(options = {}) {
   const { openCompareTab = true, silent = false } = options;
 
   if (editorState && secondaryInputEl.value === (editorState.secondaryText || "")) {
+    setSecondarySyncStatus("Synced", "ok");
     return;
   }
 
   if (!silent) {
     applySecondaryBtn.disabled = true;
+    setSecondarySyncStatus("Applying...", "busy");
   }
   const original = applySecondaryBtn.textContent;
   if (!silent) {
@@ -250,9 +311,14 @@ async function applySecondaryText(options = {}) {
       secondaryText: secondaryInputEl.value,
     });
     renderState(data.state);
+    patchPersistedEditorState({ secondaryText: data.state.secondaryText || "" });
+    setSecondarySyncStatus("Synced", "ok");
     if (openCompareTab) {
       setActiveTab("compare");
     }
+  } catch (error) {
+    setSecondarySyncStatus("Sync failed", "error");
+    throw error;
   } finally {
     if (!silent) {
       applySecondaryBtn.disabled = false;
@@ -267,6 +333,7 @@ function scheduleSecondaryAutoApply() {
   }
 
   secondaryAutoTimer = window.setTimeout(() => {
+    setSecondarySyncStatus("Auto-updating...", "busy");
     applySecondaryText({ openCompareTab: false, silent: true }).catch((error) => setError(error.message));
   }, 500);
 }
@@ -328,6 +395,8 @@ applySecondaryBtn.addEventListener("click", () => {
 });
 
 secondaryInputEl.addEventListener("input", () => {
+  patchPersistedEditorState({ secondaryText: secondaryInputEl.value });
+  setSecondarySyncStatus("Pending changes...", "pending");
   scheduleSecondaryAutoApply();
 });
 
@@ -359,13 +428,18 @@ tabButtons.forEach((button) => {
   });
 });
 
-setActiveTab("primary");
-fetchEditorState().catch((error) => setError(error.message));
+async function initPage() {
+  setActiveTab("primary");
+  await fetchEditorState();
+  await restorePersistedEditorState();
 
-if (!setupSse()) {
-  window.setInterval(() => {
-    fetchEditorState().catch(() => {
-      // Ignore intermittent polling errors.
-    });
-  }, pollMs);
+  if (!setupSse()) {
+    window.setInterval(() => {
+      fetchEditorState().catch(() => {
+        // Ignore intermittent polling errors.
+      });
+    }, pollMs);
+  }
 }
+
+initPage().catch((error) => setError(error.message));

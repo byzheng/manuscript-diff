@@ -211,6 +211,28 @@ button:hover {
   line-height: 1.5;
 }
 
+.sync-status {
+  margin-top: 8px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.sync-status.pending {
+  color: #6a6f75;
+}
+
+.sync-status.busy {
+  color: #1565c0;
+}
+
+.sync-status.ok {
+  color: #2e7d32;
+}
+
+.sync-status.error {
+  color: #b71c1c;
+}
+
 .diff-inline,
 .diff-sxs {
   border: 1px solid var(--border);
