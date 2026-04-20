@@ -3,6 +3,14 @@
   --card: #ffffff;
   --ink: #202124;
   --muted: #5f6368;
+  --menu-bg: #f7f5ef;
+  --menu-border: #ddd7c8;
+  --menu-shadow: 0 4px 14px rgba(17, 24, 39, 0.08);
+  --menu-btn-bg: #fcfbf7;
+  --menu-btn-border: #d6d2c7;
+  --menu-btn-hover: #f0ede3;
+  --menu-accent: #1f5ea8;
+  --menu-accent-hover: #184d8b;
   --ok: #2e7d32;
   --busy: #1565c0;
   --error: #b71c1c;
@@ -131,6 +139,34 @@ button:hover {
 .top-menu {
   top: 8px;
   z-index: 30;
+  background: var(--menu-bg) !important;
+  border: 1px solid var(--menu-border) !important;
+  box-shadow: var(--menu-shadow);
+  backdrop-filter: blur(6px);
+}
+
+.top-menu .btn,
+.top-menu .input-group-text,
+.top-menu .form-control {
+  border-color: var(--menu-btn-border);
+}
+
+.top-menu .btn {
+  background: var(--menu-btn-bg);
+  color: #1f2937;
+  font-weight: 600;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.top-menu .btn:hover {
+  background: var(--menu-btn-hover);
+  border-color: #c7c1b3;
+}
+
+.top-menu .btn:focus-visible,
+.top-menu .form-control:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 0.2rem rgba(31, 94, 168, 0.2);
 }
 
 .window-extra-group {
@@ -145,9 +181,20 @@ button:hover {
 }
 
 .tab-btn.active {
-  background: #0d6efd;
-  border-color: #0d6efd;
+  background: var(--menu-accent);
+  border-color: var(--menu-accent);
   color: #fff;
+}
+
+.top-menu .tab-btn.active:hover {
+  background: var(--menu-accent-hover);
+  border-color: var(--menu-accent-hover);
+}
+
+.top-menu .input-group-text {
+  background: #f3f0e7;
+  color: #475467;
+  font-weight: 600;
 }
 
 .tab-panel {
