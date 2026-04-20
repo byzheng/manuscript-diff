@@ -49,9 +49,11 @@ function renderJobPage(jobId, pollFallbackMs) {
       <a class="btn btn-outline-secondary btn-sm me-2" href="/">Home</a>
 
       <div class="d-flex flex-wrap gap-2 align-items-center flex-grow-1">
-        <button class="tab-btn btn btn-outline-primary btn-sm active" type="button" data-tab="primary">Primary</button>
-        <button class="tab-btn btn btn-outline-primary btn-sm" type="button" data-tab="secondary">Secondary</button>
-        <button class="tab-btn btn btn-outline-primary btn-sm" type="button" data-tab="compare">Diff</button>
+        <div class="tab-segment" role="tablist" aria-label="Editor tabs">
+          <button class="tab-btn btn btn-outline-primary btn-sm active" type="button" data-tab="primary">Primary</button>
+          <button class="tab-btn btn btn-outline-primary btn-sm" type="button" data-tab="secondary">Secondary</button>
+          <button class="tab-btn btn btn-outline-primary btn-sm" type="button" data-tab="compare">Diff</button>
+        </div>
         <button id="refresh-btn" class="btn btn-success btn-sm" type="button">Refresh</button>
         <div class="input-group input-group-sm window-extra-group">
           <span class="input-group-text">Extra</span>
