@@ -30,6 +30,7 @@ let editorState = null;
 let activeTab = "primary";
 let lastSearchTerm = "";
 let lastSearchIndex = -1;
+let secondaryAutoTimer = null;
 
 function escapeHtml(text) {
   return String(text)
@@ -229,21 +230,45 @@ function findNextParagraphByKeyword() {
   setError(`No paragraph found for keyword: ${term}`);
 }
 
-async function applySecondaryText() {
-  applySecondaryBtn.disabled = true;
+async function applySecondaryText(options = {}) {
+  const { openCompareTab = true, silent = false } = options;
+
+  if (editorState && secondaryInputEl.value === (editorState.secondaryText || "")) {
+    return;
+  }
+
+  if (!silent) {
+    applySecondaryBtn.disabled = true;
+  }
   const original = applySecondaryBtn.textContent;
-  applySecondaryBtn.textContent = "Applying...";
+  if (!silent) {
+    applySecondaryBtn.textContent = "Applying...";
+  }
 
   try {
     const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/secondary`, {
       secondaryText: secondaryInputEl.value,
     });
     renderState(data.state);
-    setActiveTab("compare");
+    if (openCompareTab) {
+      setActiveTab("compare");
+    }
   } finally {
-    applySecondaryBtn.disabled = false;
-    applySecondaryBtn.textContent = original;
+    if (!silent) {
+      applySecondaryBtn.disabled = false;
+      applySecondaryBtn.textContent = original;
+    }
   }
+}
+
+function scheduleSecondaryAutoApply() {
+  if (secondaryAutoTimer) {
+    window.clearTimeout(secondaryAutoTimer);
+  }
+
+  secondaryAutoTimer = window.setTimeout(() => {
+    applySecondaryText({ openCompareTab: false, silent: true }).catch((error) => setError(error.message));
+  }, 500);
 }
 
 async function applyWindowExtra() {
@@ -300,6 +325,10 @@ refreshBtn.addEventListener("click", () => {
 
 applySecondaryBtn.addEventListener("click", () => {
   applySecondaryText().catch((error) => setError(error.message));
+});
+
+secondaryInputEl.addEventListener("input", () => {
+  scheduleSecondaryAutoApply();
 });
 
 applyWindowExtraBtn.addEventListener("click", () => {
