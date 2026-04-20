@@ -33,6 +33,29 @@ let lastSearchTerm = "";
 let lastSearchIndex = -1;
 let secondaryAutoTimer = null;
 const editorStorageKey = `manuscript-diff:${jobId}:editor`;
+const secondaryMinHeightPx = 280;
+
+function resizeSecondaryInputToViewport() {
+  if (activeTab !== "secondary") {
+    return;
+  }
+
+  const panel = tabPanels.secondary;
+  if (!panel || !panel.classList.contains("active")) {
+    return;
+  }
+
+  const controls = panel.querySelector(".inline-controls");
+  const syncHeight = secondarySyncStatusEl ? secondarySyncStatusEl.getBoundingClientRect().height : 0;
+  const controlsHeight = controls ? controls.getBoundingClientRect().height : 0;
+  const reserveBelowInput = syncHeight + controlsHeight + 28;
+
+  const inputTop = secondaryInputEl.getBoundingClientRect().top;
+  const availableHeight = Math.floor(window.innerHeight - inputTop - reserveBelowInput);
+  const targetHeight = Math.max(secondaryMinHeightPx, availableHeight);
+
+  secondaryInputEl.style.height = `${targetHeight}px`;
+}
 
 function loadPersistedEditorState() {
   try {
@@ -162,6 +185,12 @@ function setActiveTab(nextTab) {
       });
     }, 0);
   }
+
+  if (nextTab === "secondary") {
+    window.setTimeout(() => {
+      resizeSecondaryInputToViewport();
+    }, 0);
+  }
 }
 
 function renderParagraphs(state) {
@@ -217,6 +246,12 @@ function renderState(state) {
 
   renderParagraphs(state);
   renderDiff(state);
+
+  if (activeTab === "secondary") {
+    window.setTimeout(() => {
+      resizeSecondaryInputToViewport();
+    }, 0);
+  }
 }
 
 async function fetchEditorState() {
@@ -447,6 +482,10 @@ tabButtons.forEach((button) => {
   button.addEventListener("click", () => {
     setActiveTab(button.dataset.tab);
   });
+});
+
+window.addEventListener("resize", () => {
+  resizeSecondaryInputToViewport();
 });
 
 async function initPage() {
