@@ -14,8 +14,12 @@
   --ok: #2e7d32;
   --busy: #1565c0;
   --error: #b71c1c;
-  --insert-bg: #dff3df;
-  --delete-bg: #ffe1e1;
+  --insert-bg: #d8f2e8;
+  --insert-fg: #0f5132;
+  --insert-accent: #1f7a57;
+  --delete-bg: #f6ede8;
+  --delete-fg: #5c4639;
+  --delete-accent: #8c6a54;
   --border: #d8d6ca;
 }
 
@@ -296,12 +300,45 @@ button:hover {
 
 .ins {
   background: var(--insert-bg);
-  text-decoration: underline;
+  color: var(--insert-fg);
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--insert-accent);
+  border-bottom: 1px solid var(--insert-accent);
+  border-radius: 2px;
+  padding: 0 1px;
 }
 
 .del {
   background: var(--delete-bg);
-  text-decoration: line-through;
+  color: var(--delete-fg);
+  text-decoration-line: line-through;
+  text-decoration-thickness: 2px;
+  text-decoration-color: var(--delete-accent);
+  border-bottom: 1px dashed var(--delete-accent);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+@media (prefers-contrast: more) {
+  .ins,
+  .del {
+    text-decoration-thickness: 3px;
+  }
+}
+
+@media (forced-colors: active) {
+  .ins {
+    background: Highlight;
+    color: HighlightText;
+    border-bottom: 2px solid ButtonText;
+  }
+
+  .del {
+    background: CanvasText;
+    color: Canvas;
+    border-bottom: 2px dashed ButtonText;
+  }
 }
 
 .diff-sxs {
