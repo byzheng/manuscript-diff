@@ -3,6 +3,7 @@ const os = require("os");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn } = require("child_process");
+const mammoth = require("mammoth");
 
 function runPandoc({ pandocPath, inputPath, extraArgs }) {
   return new Promise((resolve, reject) => {
@@ -45,33 +46,56 @@ function makeTempDocxPath(inputPath) {
   return path.join(os.tmpdir(), `manuscript-diff-${baseName}-${hash}-${stamp}.docx`);
 }
 
-async function convertDocxToText({ pandocPath, inputPath, extraArgs }) {
-  try {
-    return await runPandoc({ pandocPath, inputPath, extraArgs });
-  } catch (error) {
-    const message = String(error && error.message ? error.message : "").toLowerCase();
-    const isPermissionError = message.includes("permission denied");
+async function runMammoth(inputPath) {
+  const result = await mammoth.extractRawText({ path: inputPath });
+  return String(result.value || "").replace(/\r\n/g, "\n");
+}
 
-    if (!isPermissionError) {
+function isPermissionError(error) {
+  const message = String(error && error.message ? error.message : "").toLowerCase();
+  return message.includes("permission denied") || message.includes("eacces");
+}
+
+async function withTempCopyOnPermission(inputPath, work) {
+  try {
+    return await work(inputPath);
+  } catch (error) {
+    if (!isPermissionError(error)) {
       throw error;
     }
 
     const tempPath = makeTempDocxPath(inputPath);
-
     try {
-      // Some synced/virtualized folders can block pandoc direct file access.
-      // Copying to a local temp file avoids this for many OneDrive-style paths.
       fs.copyFileSync(inputPath, tempPath);
-      return await runPandoc({ pandocPath, inputPath: tempPath, extraArgs });
-    } catch (fallbackError) {
-      throw new Error(
-        `Pandoc direct read failed with permission denied and temp-copy fallback failed: ${fallbackError.message}`
-      );
+      return await work(tempPath);
     } finally {
       if (fs.existsSync(tempPath)) {
         fs.unlinkSync(tempPath);
       }
     }
+  }
+}
+
+async function convertDocxToText({ pandocPath, inputPath, extraArgs, conversionMode }) {
+  const mode = conversionMode || "mammoth";
+
+  if (mode === "pandoc") {
+    return withTempCopyOnPermission(inputPath, (candidatePath) =>
+      runPandoc({ pandocPath, inputPath: candidatePath, extraArgs })
+    );
+  }
+
+  try {
+    return await withTempCopyOnPermission(inputPath, (candidatePath) => runMammoth(candidatePath));
+  } catch (mammothError) {
+    // Fallback keeps the pipeline running for unusual DOCX constructs.
+    return withTempCopyOnPermission(inputPath, (candidatePath) =>
+      runPandoc({ pandocPath, inputPath: candidatePath, extraArgs })
+    ).catch((pandocError) => {
+      throw new Error(
+        `DOCX conversion failed (mammoth then pandoc fallback). mammoth=${mammothError.message}; pandoc=${pandocError.message}`
+      );
+    });
   }
 }
 

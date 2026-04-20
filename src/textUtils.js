@@ -20,12 +20,70 @@ function stripTrailingSpaces(text) {
     .join("\n");
 }
 
+function isLikelyHeadingLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  if (trimmed.length > 80) {
+    return false;
+  }
+
+  if (/^[A-Z][A-Za-z0-9 ,()\-:/&]+$/.test(trimmed) && !/[.!?]$/.test(trimmed)) {
+    return true;
+  }
+
+  return false;
+}
+
+function endsParagraph(line) {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  if (isLikelyHeadingLine(trimmed)) {
+    return true;
+  }
+
+  return /[.!?]["')\]]?$/.test(trimmed) || /:$/.test(trimmed);
+}
+
+function paragraphiseLines(text) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const paragraphs = [];
+  let current = [];
+
+  const flush = () => {
+    if (current.length === 0) {
+      return;
+    }
+    paragraphs.push(current.join(" ").replace(/\s{2,}/g, " ").trim());
+    current = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flush();
+      continue;
+    }
+
+    current.push(line);
+
+    if (endsParagraph(line)) {
+      flush();
+    }
+  }
+
+  flush();
+
+  return paragraphs.filter((paragraph) => paragraph.length > 0);
+}
+
 function unwrapWrappedLines(text) {
-  return text
-    .split(/\n\s*\n/g)
-    .map((paragraph) => paragraph.replace(/\n+/g, " ").replace(/\s{2,}/g, " ").trim())
-    .filter((paragraph) => paragraph.length > 0)
-    .join("\n\n");
+  return paragraphiseLines(text).join("\n\n");
 }
 
 function applyNormalisation(input, options) {
@@ -62,7 +120,7 @@ function escapeHtml(text) {
 function renderInlineDiff(parts) {
   return parts
     .map((part) => {
-      const safe = escapeHtml(part.value);
+      const safe = escapeHtml(part.value).replace(/\n/g, "<br/>");
       // Primary is the working version: words only in primary are "insertions"
       // and words only in secondary are "deletions" from the primary perspective.
       if (part.added) {
@@ -83,7 +141,7 @@ function renderSideBySide(parts) {
   let right = "";
 
   for (const part of parts) {
-    const safe = escapeHtml(part.value);
+    const safe = escapeHtml(part.value).replace(/\n/g, "<br/>");
     if (part.added) {
       right += `<span class=\"del\">${safe}</span>`;
       continue;
@@ -102,19 +160,7 @@ function renderSideBySide(parts) {
 }
 
 function splitParagraphs(text) {
-  return text
-    .split(/\n\s*\n/g)
-    .map((paragraph) => paragraph.trim())
-    .filter((paragraph) => paragraph.length > 0);
-}
-
-function diffScore(parts) {
-  return parts.reduce((total, part) => {
-    if (part.added || part.removed) {
-      return total + part.value.length;
-    }
-    return total;
-  }, 0);
+  return paragraphiseLines(text);
 }
 
 function tokeniseForSimilarity(paragraph) {
@@ -144,6 +190,25 @@ function paragraphSimilarity(a, b) {
   }
 
   return (2 * common) / (aSet.size + bSet.size);
+}
+
+function findBestAnchorIndex(primaryParagraphs, targetParagraph, fromIndex, toIndex) {
+  let best = {
+    index: -1,
+    score: 0,
+  };
+
+  for (let i = fromIndex; i <= toIndex; i += 1) {
+    const score = paragraphSimilarity(primaryParagraphs[i], targetParagraph);
+    if (score > best.score) {
+      best = {
+        index: i,
+        score,
+      };
+    }
+  }
+
+  return best;
 }
 
 function findBestParagraphAlignment(primaryParagraphs, secondaryParagraphs) {
@@ -256,6 +321,33 @@ function choosePrimarySegment(normalisedPrimary, normalisedSecondary, compareMod
     };
   }
 
+  // Anchor by first and last secondary paragraphs, then keep the full primary range
+  // between anchors so missing middle paragraphs don't collapse the matched block.
+  const minAnchorScore = 0.06;
+  const startAnchor = findBestAnchorIndex(primaryParagraphs, secondaryParagraphs[0], 0, primaryParagraphs.length - 1);
+  const endAnchor = findBestAnchorIndex(
+    primaryParagraphs,
+    secondaryParagraphs[secondaryParagraphs.length - 1],
+    Math.max(0, startAnchor.index),
+    primaryParagraphs.length - 1
+  );
+
+  if (startAnchor.index >= 0 && endAnchor.index >= startAnchor.index && startAnchor.score >= minAnchorScore && endAnchor.score >= minAnchorScore) {
+    const anchoredText = primaryParagraphs.slice(startAnchor.index, endAnchor.index + 1).join("\n\n");
+    return {
+      selectedPrimary: anchoredText,
+      alignment: {
+        mode: "subset",
+        matched: true,
+        startParagraph: startAnchor.index,
+        endParagraph: endAnchor.index,
+        startScore: startAnchor.score,
+        endScore: endAnchor.score,
+        method: "anchor-first-last",
+      },
+    };
+  }
+
   const best = findBestParagraphAlignment(primaryParagraphs, secondaryParagraphs);
   if (!best) {
     return {
@@ -309,5 +401,6 @@ function buildDiff(primaryText, secondaryText, options) {
 
 module.exports = {
   normaliseText: applyNormalisation,
+  splitParagraphs,
   buildDiff,
 };

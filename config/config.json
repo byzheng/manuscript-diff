@@ -10,6 +10,7 @@
       "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/122-GPCGMWheatBarley/GP-CGM-Wheat-Barley.docx",
       "secondaryText": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/122-GPCGMWheatBarley/modified.txt",
       "outputDir": "./data/paper1",
+      "conversionMode": "mammoth",
       "compareMode": "subset",
       "pandocArgs": ["-t", "plain"],
       "normalise": {

@@ -40,25 +40,54 @@ function renderJobPage(jobId, pollFallbackMs) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Job ${jobId}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <main class="layout">
-    <p><a href="/">Back to jobs</a></p>
-    <h1 id="job-title">${jobId}</h1>
+    <header class="top-menu navbar navbar-expand-lg bg-white border rounded-3 px-2 py-2 mb-3 sticky-top">
+      <a class="btn btn-outline-secondary btn-sm me-2" href="/">Home</a>
+
+      <div class="d-flex flex-wrap gap-2 align-items-center flex-grow-1">
+        <button class="tab-btn btn btn-outline-primary btn-sm active" type="button" data-tab="primary">Primary</button>
+        <button class="tab-btn btn btn-outline-primary btn-sm" type="button" data-tab="secondary">Secondary</button>
+        <button class="tab-btn btn btn-outline-primary btn-sm" type="button" data-tab="compare">Diff</button>
+        <button id="refresh-btn" class="btn btn-success btn-sm" type="button">Refresh</button>
+      </div>
+
+      <div class="search-row mt-2 mt-lg-0 ms-lg-2">
+        <div class="input-group input-group-sm">
+          <input id="paragraph-search-input" class="paragraph-search-input form-control" type="text" placeholder="Search primary paragraphs" />
+          <button id="paragraph-search-btn" class="btn btn-outline-secondary" type="button">Search</button>
+        </div>
+      </div>
+    </header>
+
+    <h1 id="job-title" class="h3">${jobId}</h1>
 
     <section class="meta-row">
       <span id="status" class="status">STARTING</span>
       <span id="updated-at">Last update: --</span>
+      <span id="start-badge" class="start-badge">Start paragraph: --</span>
       <span id="error" class="error"></span>
     </section>
 
-    <section class="controls">
-      <button id="refresh-btn" type="button">Refresh</button>
-      <button id="toggle-btn" type="button">Toggle inline/side-by-side</button>
+    <section class="tab-panel active" id="panel-primary">
+      <p class="muted">Click a paragraph to set the comparison starting point.</p>
+      <div id="primary-paragraphs" class="paragraph-list"></div>
     </section>
 
-    <section id="diff-wrap" class="diff-inline"></section>
+    <section class="tab-panel" id="panel-secondary">
+      <label for="secondary-input">Secondary text</label>
+      <textarea id="secondary-input" class="secondary-input" spellcheck="false"></textarea>
+      <div class="controls inline-controls">
+        <button id="apply-secondary-btn" type="button">Apply Secondary Text</button>
+      </div>
+    </section>
+
+    <section class="tab-panel" id="panel-compare">
+      <div id="diff-wrap" class="diff-inline"></div>
+    </section>
   </main>
 
   <script>
@@ -76,6 +105,7 @@ async function createApp() {
   const manager = new JobManager(config);
   await manager.init();
 
+  app.use(express.json({ limit: "10mb" }));
   app.use(express.static(path.resolve(process.cwd(), "public")));
 
   app.get("/", (req, res) => {
@@ -128,6 +158,60 @@ async function createApp() {
         secondaryLength: job.diff.secondaryLength,
       },
     });
+  });
+
+  app.get("/api/job/:id/editor-state", (req, res) => {
+    const state = manager.getEditorState(req.params.id);
+    if (!state) {
+      res.status(404).json({ error: "Unknown job id" });
+      return;
+    }
+    res.json(state);
+  });
+
+  app.post("/api/job/:id/start", async (req, res) => {
+    const job = manager.getJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Unknown job id" });
+      return;
+    }
+
+    try {
+      await manager.setStartParagraph(req.params.id, req.body.startParagraph);
+      res.json({ ok: true, state: manager.getEditorState(req.params.id) });
+    } catch (error) {
+      res.status(400).json({ error: error.message || "Failed to set start paragraph" });
+    }
+  });
+
+  app.post("/api/job/:id/secondary", async (req, res) => {
+    const job = manager.getJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Unknown job id" });
+      return;
+    }
+
+    try {
+      await manager.setSecondaryText(req.params.id, req.body.secondaryText);
+      res.json({ ok: true, state: manager.getEditorState(req.params.id) });
+    } catch (error) {
+      res.status(400).json({ error: error.message || "Failed to set secondary text" });
+    }
+  });
+
+  app.post("/api/job/:id/compare", async (req, res) => {
+    const job = manager.getJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Unknown job id" });
+      return;
+    }
+
+    try {
+      await manager.runCompare(req.params.id, req.body || {});
+      res.json({ ok: true, state: manager.getEditorState(req.params.id) });
+    } catch (error) {
+      res.status(400).json({ error: error.message || "Failed to compare" });
+    }
   });
 
   app.post("/api/job/:id/refresh", async (req, res) => {

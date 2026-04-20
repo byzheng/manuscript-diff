@@ -13,6 +13,10 @@ This is read-only: it visualizes changes only.
 - Preserves paragraph breaks (`white-space: pre-wrap` rendering).
 - Provides inline and basic side-by-side diff views.
 - Auto updates browser via SSE with polling fallback.
+- Tabbed editor workflow per job:
+  - Primary tab: converted primary text shown paragraph-by-paragraph; click a paragraph to set comparison start.
+  - Secondary tab: editable secondary text input.
+  - Compare tab: word-by-word diff output.
 
 ## Prerequisites
 
@@ -44,9 +48,15 @@ Per job:
 - `primaryDocx`: absolute or repo-relative path to DOCX.
 - `secondaryText`: path to plain text file.
 - `outputDir`: where `primary.txt` and `diff.html` are written.
+- `conversionMode`: `mammoth` (recommended for paragraph reliability) or `pandoc`.
 - `compareMode`: `full` (default) or `subset`.
 - `pandocArgs`: typically `["-t", "plain"]`.
 - `normalise`: text normalisation toggles.
+
+`conversionMode` details:
+
+- `mammoth`: extracts DOCX text from paragraph structure in the document XML and is usually more reliable for paragraph boundaries.
+- `pandoc`: uses pandoc text conversion. This can be preferable for some edge cases but may introduce wrapping/layout artifacts depending on source content.
 
 `normalise` options:
 
@@ -66,6 +76,12 @@ Development with auto-restart:
 
 ```bash
 npm run dev
+```
+
+Windows batch launcher (nodemon auto-reload):
+
+```bat
+dev-reload.bat
 ```
 
 Normal run:

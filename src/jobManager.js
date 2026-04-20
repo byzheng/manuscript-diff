@@ -3,7 +3,7 @@ const path = require("path");
 const chokidar = require("chokidar");
 
 const { convertDocxToText } = require("./pandoc");
-const { buildDiff, normaliseText } = require("./textUtils");
+const { buildDiff, normaliseText, splitParagraphs } = require("./textUtils");
 
 class JobManager {
   constructor(config) {
@@ -25,6 +25,10 @@ class JobManager {
         status: "starting",
         error: null,
         updatedAt: null,
+        primaryNormalized: "",
+        primaryParagraphs: [],
+        startParagraph: 0,
+        secondaryOverride: null,
         diff: {
           inlineHtml: "",
           sideBySide: { left: "", right: "" },
@@ -138,9 +142,15 @@ class JobManager {
         pandocPath: this.config.pandocPath,
         inputPath: config.primaryDocx,
         extraArgs: config.pandocArgs,
+        conversionMode: config.conversionMode,
       });
       const normalizedPrimary = normaliseText(primaryText, config.normalise || {});
       fs.writeFileSync(primaryTxtPath, normalizedPrimary, "utf8");
+      job.primaryNormalized = normalizedPrimary;
+      job.primaryParagraphs = splitParagraphs(normalizedPrimary);
+      if (job.startParagraph >= job.primaryParagraphs.length) {
+        job.startParagraph = 0;
+      }
     } catch (error) {
       this.setError(jobId, `Conversion failed: ${error.message}`);
       return;
@@ -151,16 +161,9 @@ class JobManager {
     this.emitUpdate(jobId);
 
     try {
-      const secondaryText = fs.readFileSync(config.secondaryText, "utf8");
-      const diff = buildDiff(primaryText, secondaryText, {
-        normalise: config.normalise || {},
-        compareMode: config.compareMode || "full",
-      });
-      const diffHtmlDoc = this.wrapDiffHtml(job, diff.inlineHtml);
-
-      fs.writeFileSync(diffHtmlPath, diffHtmlDoc, "utf8");
-
-      job.diff = diff;
+      const secondaryText = this.getSecondaryText(job);
+      const diff = this.computeDiffFromCurrentState(job, secondaryText);
+      this.persistDiff(job, diff, diffHtmlPath);
       job.status = "ok";
       job.error = null;
       job.updatedAt = new Date().toISOString();
@@ -170,6 +173,120 @@ class JobManager {
     } catch (error) {
       this.setError(jobId, `Diff failed: ${error.message}`);
     }
+  }
+
+  getSecondaryText(job) {
+    if (typeof job.secondaryOverride === "string") {
+      return job.secondaryOverride;
+    }
+
+    return fs.readFileSync(job.config.secondaryText, "utf8");
+  }
+
+  computeDiffFromCurrentState(job, secondaryText) {
+    const fromStart = job.primaryParagraphs.slice(job.startParagraph).join("\n\n") || job.primaryNormalized;
+
+    return buildDiff(fromStart, secondaryText, {
+      normalise: job.config.normalise || {},
+      compareMode: "full",
+    });
+  }
+
+  persistDiff(job, diff, diffHtmlPath) {
+    const diffHtmlDoc = this.wrapDiffHtml(job, diff.inlineHtml);
+    fs.writeFileSync(diffHtmlPath, diffHtmlDoc, "utf8");
+    job.diff = diff;
+  }
+
+  async compareOnly(jobId, reason = "manual-compare") {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error("Unknown job id");
+    }
+
+    const diffHtmlPath = path.join(job.config.outputDir, "diff.html");
+    job.status = "diffing";
+    job.error = null;
+    this.emitUpdate(jobId);
+
+    const secondaryText = this.getSecondaryText(job);
+    const diff = this.computeDiffFromCurrentState(job, secondaryText);
+    this.persistDiff(job, diff, diffHtmlPath);
+
+    job.status = "ok";
+    job.updatedAt = new Date().toISOString();
+    console.log(`[job:${jobId}] trigger=${reason} updated, changes=${diff.changes}`);
+    this.emitUpdate(jobId);
+  }
+
+  async setStartParagraph(jobId, startParagraph) {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error("Unknown job id");
+    }
+
+    const next = Number(startParagraph);
+    if (!Number.isInteger(next) || next < 0 || next >= Math.max(1, job.primaryParagraphs.length)) {
+      throw new Error("Invalid startParagraph");
+    }
+
+    job.startParagraph = next;
+    await this.compareOnly(jobId, "set-start-paragraph");
+  }
+
+  async setSecondaryText(jobId, text) {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error("Unknown job id");
+    }
+
+    job.secondaryOverride = String(text || "");
+    await this.compareOnly(jobId, "set-secondary-text");
+  }
+
+  async runCompare(jobId, payload = {}) {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error("Unknown job id");
+    }
+
+    if (payload.startParagraph !== undefined) {
+      const next = Number(payload.startParagraph);
+      if (Number.isInteger(next) && next >= 0 && next < Math.max(1, job.primaryParagraphs.length)) {
+        job.startParagraph = next;
+      }
+    }
+
+    if (payload.secondaryText !== undefined) {
+      job.secondaryOverride = String(payload.secondaryText || "");
+    }
+
+    await this.compareOnly(jobId, "api-compare");
+  }
+
+  getEditorState(jobId) {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      return null;
+    }
+
+    return {
+      id: job.id,
+      name: job.name,
+      status: job.status,
+      error: job.error,
+      updatedAt: job.updatedAt,
+      startParagraph: job.startParagraph,
+      paragraphs: job.primaryParagraphs.map((text, index) => ({ index, text })),
+      secondaryText: this.getSecondaryText(job),
+      diff: {
+        inlineHtml: job.diff.inlineHtml,
+        sideBySide: job.diff.sideBySide,
+        changes: job.diff.changes,
+        primaryLength: job.diff.primaryLength,
+        secondaryLength: job.diff.secondaryLength,
+      },
+    };
   }
 
   wrapDiffHtml(job, body) {

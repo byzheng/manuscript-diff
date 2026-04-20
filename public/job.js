@@ -1,14 +1,31 @@
 const jobId = window.__JOB_ID__;
 const pollMs = Number(window.__POLL_MS__) || 2000;
 
-let sideBySide = false;
-
 const statusEl = document.getElementById("status");
 const updatedAtEl = document.getElementById("updated-at");
+const startBadgeEl = document.getElementById("start-badge");
 const errorEl = document.getElementById("error");
-const diffWrapEl = document.getElementById("diff-wrap");
-const toggleBtn = document.getElementById("toggle-btn");
+
 const refreshBtn = document.getElementById("refresh-btn");
+const applySecondaryBtn = document.getElementById("apply-secondary-btn");
+
+const paragraphListEl = document.getElementById("primary-paragraphs");
+const paragraphSearchInputEl = document.getElementById("paragraph-search-input");
+const paragraphSearchBtn = document.getElementById("paragraph-search-btn");
+const secondaryInputEl = document.getElementById("secondary-input");
+const diffWrapEl = document.getElementById("diff-wrap");
+
+const tabButtons = Array.from(document.querySelectorAll(".tab-btn"));
+const tabPanels = {
+  primary: document.getElementById("panel-primary"),
+  secondary: document.getElementById("panel-secondary"),
+  compare: document.getElementById("panel-compare"),
+};
+
+let editorState = null;
+let activeTab = "primary";
+let lastSearchTerm = "";
+let lastSearchIndex = -1;
 
 function escapeHtml(text) {
   return String(text)
@@ -24,68 +41,166 @@ function setStatus(status) {
   statusEl.className = `status status-${status || "unknown"}`;
 }
 
-function renderDiff(payload) {
-  const diff = payload.diff || {};
-  if (!sideBySide) {
-    diffWrapEl.className = "diff-inline";
-    diffWrapEl.innerHTML = `<div class="diff">${diff.inlineHtml || ""}</div>`;
-    return;
+function setError(message) {
+  errorEl.textContent = message ? `Error: ${escapeHtml(message)}` : "";
+}
+
+function setActiveTab(nextTab) {
+  activeTab = nextTab;
+  tabButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === nextTab);
+  });
+
+  Object.entries(tabPanels).forEach(([name, panel]) => {
+    panel.classList.toggle("active", name === nextTab);
+  });
+}
+
+function renderParagraphs(state) {
+  const rows = state.paragraphs || [];
+  paragraphListEl.innerHTML = rows
+    .map((paragraph) => {
+      const activeClass = paragraph.index === state.startParagraph ? " active" : "";
+      return `<button type="button" class="paragraph-item${activeClass}" data-index="${paragraph.index}">
+        <span class="paragraph-index">${paragraph.index + 1}</span>
+        <span class="paragraph-text">${escapeHtml(paragraph.text)}</span>
+      </button>`;
+    })
+    .join("");
+
+  paragraphListEl.querySelectorAll(".paragraph-item").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.dataset.index);
+      setStartParagraph(index, { openCompareTab: false }).catch((error) => setError(error.message));
+    });
+  });
+}
+
+function renderDiff(state) {
+  const diff = (state && state.diff) || {};
+  diffWrapEl.innerHTML = `<div class="diff">${diff.inlineHtml || ""}</div>`;
+}
+
+function renderState(state) {
+  editorState = state;
+  document.getElementById("job-title").textContent = state.name || jobId;
+  setStatus(state.status);
+  updatedAtEl.textContent = `Last update: ${state.updatedAt || "--"}`;
+  startBadgeEl.textContent = `Start paragraph: ${Number.isInteger(state.startParagraph) ? state.startParagraph + 1 : "--"}`;
+  setError(state.error || "");
+
+  if (document.activeElement !== secondaryInputEl) {
+    secondaryInputEl.value = state.secondaryText || "";
   }
 
-  diffWrapEl.className = "diff-sxs";
-  const left = (diff.sideBySide && diff.sideBySide.left) || "";
-  const right = (diff.sideBySide && diff.sideBySide.right) || "";
-  diffWrapEl.innerHTML = `
-    <div class="col">
-      <h3>Primary</h3>
-      <div class="diff">${left}</div>
-    </div>
-    <div class="col">
-      <h3>Secondary</h3>
-      <div class="diff">${right}</div>
-    </div>`;
+  renderParagraphs(state);
+  renderDiff(state);
 }
 
-function updateMeta(payload) {
-  setStatus(payload.status);
-  updatedAtEl.textContent = `Last update: ${payload.updatedAt || "--"}`;
-  errorEl.textContent = payload.error ? `Error: ${escapeHtml(payload.error)}` : "";
+async function fetchEditorState() {
+  const response = await fetch(`/api/job/${encodeURIComponent(jobId)}/editor-state`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to load editor state: ${response.status}`);
+  }
+
+  const state = await response.json();
+  renderState(state);
 }
 
-async function loadDiff() {
-  const response = await fetch(`/api/job/${encodeURIComponent(jobId)}/diff`, {
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
     cache: "no-store",
   });
 
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(`Failed to load diff: ${response.status}`);
+    throw new Error(data.error || `Request failed: ${response.status}`);
   }
 
-  const payload = await response.json();
-  document.getElementById("job-title").textContent = payload.name || jobId;
-  updateMeta(payload);
-  renderDiff(payload);
+  return data;
 }
 
 async function forceRefresh() {
   refreshBtn.disabled = true;
-  const previousText = refreshBtn.textContent;
+  const original = refreshBtn.textContent;
   refreshBtn.textContent = "Refreshing...";
 
   try {
-    const response = await fetch(`/api/job/${encodeURIComponent(jobId)}/refresh`, {
-      method: "POST",
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to refresh: ${response.status}`);
-    }
-
-    await loadDiff();
+    await postJson(`/api/job/${encodeURIComponent(jobId)}/refresh`, {});
+    await fetchEditorState();
   } finally {
     refreshBtn.disabled = false;
-    refreshBtn.textContent = previousText;
+    refreshBtn.textContent = original;
+  }
+}
+
+async function setStartParagraph(index, options = {}) {
+  const { openCompareTab = true } = options;
+  const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/start`, {
+    startParagraph: index,
+  });
+
+  renderState(data.state);
+  if (openCompareTab) {
+    setActiveTab("compare");
+  }
+}
+
+function findNextParagraphByKeyword() {
+  if (!editorState || !Array.isArray(editorState.paragraphs) || editorState.paragraphs.length === 0) {
+    return;
+  }
+
+  const term = (paragraphSearchInputEl.value || "").trim().toLowerCase();
+  if (!term) {
+    setError("Enter a keyword to search.");
+    return;
+  }
+
+  const paragraphs = editorState.paragraphs;
+  if (term !== lastSearchTerm) {
+    lastSearchTerm = term;
+    lastSearchIndex = editorState.startParagraph;
+  }
+
+  const total = paragraphs.length;
+  for (let step = 1; step <= total; step += 1) {
+    const idx = (lastSearchIndex + step) % total;
+    const text = String(paragraphs[idx].text || "").toLowerCase();
+    if (text.includes(term)) {
+      lastSearchIndex = idx;
+
+      const btn = paragraphListEl.querySelector(`.paragraph-item[data-index=\"${idx}\"]`);
+      if (btn) {
+        btn.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      setStartParagraph(idx, { openCompareTab: false }).catch((error) => setError(error.message));
+      setError("");
+      return;
+    }
+  }
+
+  setError(`No paragraph found for keyword: ${term}`);
+}
+
+async function applySecondaryText() {
+  applySecondaryBtn.disabled = true;
+  const original = applySecondaryBtn.textContent;
+  applySecondaryBtn.textContent = "Applying...";
+
+  try {
+    const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/secondary`, {
+      secondaryText: secondaryInputEl.value,
+    });
+    renderState(data.state);
+    setActiveTab("compare");
+  } finally {
+    applySecondaryBtn.disabled = false;
+    applySecondaryBtn.textContent = original;
   }
 }
 
@@ -101,19 +216,18 @@ function setupSse() {
       if (data.jobId && data.jobId !== jobId) {
         return;
       }
-      loadDiff().catch((error) => {
-        errorEl.textContent = `Error: ${escapeHtml(error.message)}`;
-      });
+
+      fetchEditorState().catch((error) => setError(error.message));
     } catch (error) {
-      errorEl.textContent = `Error: ${escapeHtml(error.message)}`;
+      setError(error.message);
     }
   };
 
   stream.onerror = () => {
     stream.close();
     window.setInterval(() => {
-      loadDiff().catch(() => {
-        // Polling will keep trying.
+      fetchEditorState().catch(() => {
+        // Ignore intermittent polling errors.
       });
     }, pollMs);
   };
@@ -121,27 +235,38 @@ function setupSse() {
   return true;
 }
 
-toggleBtn.addEventListener("click", () => {
-  sideBySide = !sideBySide;
-  loadDiff().catch((error) => {
-    errorEl.textContent = `Error: ${escapeHtml(error.message)}`;
-  });
-});
-
 refreshBtn.addEventListener("click", () => {
-  forceRefresh().catch((error) => {
-    errorEl.textContent = `Error: ${escapeHtml(error.message)}`;
+  forceRefresh().catch((error) => setError(error.message));
+});
+
+applySecondaryBtn.addEventListener("click", () => {
+  applySecondaryText().catch((error) => setError(error.message));
+});
+
+paragraphSearchBtn.addEventListener("click", () => {
+  findNextParagraphByKeyword();
+});
+
+paragraphSearchInputEl.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    findNextParagraphByKeyword();
+  }
+});
+
+tabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    setActiveTab(button.dataset.tab);
   });
 });
 
-loadDiff().catch((error) => {
-  errorEl.textContent = `Error: ${escapeHtml(error.message)}`;
-});
+setActiveTab("primary");
+fetchEditorState().catch((error) => setError(error.message));
 
 if (!setupSse()) {
   window.setInterval(() => {
-    loadDiff().catch(() => {
-      // Polling fallback intentionally ignores intermittent errors.
+    fetchEditorState().catch(() => {
+      // Ignore intermittent polling errors.
     });
   }, pollMs);
 }
