@@ -4,7 +4,11 @@ const path = require("path");
 const CONFIG_PATH = path.resolve(process.cwd(), "config", "config.json");
 
 function asAbsolute(value) {
-  if (!value) {
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim() === "") {
     return value;
   }
 
@@ -28,9 +32,11 @@ function loadConfig() {
   }
 
   const jobs = config.jobs.map((job) => {
-    if (!job.id || !job.primaryDocx || !job.secondaryText || !job.outputDir) {
+    if (!job.id || !job.primaryDocx || !job.outputDir) {
       throw new Error(`Invalid job config: ${JSON.stringify(job)}`);
     }
+
+    const secondaryTextValue = typeof job.secondaryText === "string" ? job.secondaryText.trim() : job.secondaryText;
 
     return {
       ...job,
@@ -39,7 +45,7 @@ function loadConfig() {
       compareMode: job.compareMode || "full",
       windowExtra: Number.isInteger(job.windowExtra) ? job.windowExtra : 0,
       primaryDocx: asAbsolute(job.primaryDocx),
-      secondaryText: asAbsolute(job.secondaryText),
+      secondaryText: asAbsolute(secondaryTextValue),
       outputDir: asAbsolute(job.outputDir),
       normalise: {
         collapseWhitespace: true,

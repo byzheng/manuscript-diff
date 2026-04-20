@@ -88,12 +88,14 @@ class JobManager {
       ignoreTemp: true,
     });
 
-    watchTarget({
-      filePath: jobConfig.secondaryText,
-      stabilityThreshold: 300,
-      onReason: "secondary",
-      ignoreTemp: false,
-    });
+    if (typeof jobConfig.secondaryText === "string" && jobConfig.secondaryText.trim() !== "") {
+      watchTarget({
+        filePath: jobConfig.secondaryText,
+        stabilityThreshold: 300,
+        onReason: "secondary",
+        ignoreTemp: false,
+      });
+    }
   }
 
   scheduleRefresh(jobId, reason) {
@@ -185,7 +187,20 @@ class JobManager {
       return job.secondaryOverride;
     }
 
-    return fs.readFileSync(job.config.secondaryText, "utf8");
+    const secondaryPath = job.config.secondaryText;
+    if (typeof secondaryPath !== "string" || secondaryPath.trim() === "") {
+      return "";
+    }
+
+    try {
+      return fs.readFileSync(secondaryPath, "utf8");
+    } catch (error) {
+      if (error && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
+        return "";
+      }
+
+      throw error;
+    }
   }
 
   computeDiffFromCurrentState(job, secondaryText) {

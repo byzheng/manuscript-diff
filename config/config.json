@@ -8,7 +8,7 @@
       "id": "paper1",
       "name": "Paper 1",
       "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/122-GPCGMWheatBarley/GP-CGM-Wheat-Barley.docx",
-      "secondaryText": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/122-GPCGMWheatBarley/modified.txt",
+      "secondaryText": "",
       "outputDir": "./data/paper1",
       "conversionMode": "mammoth",
       "compareMode": "subset",

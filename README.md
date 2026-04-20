@@ -46,7 +46,7 @@ Per job:
 - `id`: unique id used in URL.
 - `name`: display name.
 - `primaryDocx`: absolute or repo-relative path to DOCX.
-- `secondaryText`: path to plain text file.
+- `secondaryText`: optional path to plain text file. If omitted, empty, or missing on disk, the app uses empty text.
 - `outputDir`: where `primary.txt` and `diff.html` are written.
 - `conversionMode`: `mammoth` (recommended for paragraph reliability) or `pandoc`.
 - `compareMode`: `full` (default) or `subset`.
