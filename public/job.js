@@ -49,6 +49,29 @@ function setError(message) {
   errorEl.textContent = message ? `Error: ${escapeHtml(message)}` : "";
 }
 
+function centerSelectedParagraphInViewport() {
+  if (!editorState || !Number.isInteger(editorState.startParagraph)) {
+    return;
+  }
+
+  const selected = paragraphListEl.querySelector(`.paragraph-item[data-index=\"${editorState.startParagraph}\"]`);
+  if (!selected) {
+    return;
+  }
+
+  const header = document.querySelector(".top-menu");
+  const headerHeight = header ? header.getBoundingClientRect().height : 0;
+
+  const rect = selected.getBoundingClientRect();
+  const currentTop = window.scrollY || window.pageYOffset;
+  const targetTop = currentTop + rect.top - (window.innerHeight / 2) + (rect.height / 2) - (headerHeight / 2);
+
+  window.scrollTo({
+    top: Math.max(0, targetTop),
+    behavior: "smooth",
+  });
+}
+
 function setActiveTab(nextTab) {
   activeTab = nextTab;
   tabButtons.forEach((button) => {
@@ -60,16 +83,10 @@ function setActiveTab(nextTab) {
   });
 
   if (nextTab === "primary") {
-    window.requestAnimationFrame(() => {
-      if (!editorState || !Number.isInteger(editorState.startParagraph)) {
-        return;
-      }
-
-      const selected = paragraphListEl.querySelector(`.paragraph-item[data-index=\"${editorState.startParagraph}\"]`);
-      if (selected) {
-        selected.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    });
+    // Delay one tick so the tab panel is fully visible before measuring positions.
+    window.setTimeout(() => {
+      centerSelectedParagraphInViewport();
+    }, 0);
   }
 }
 
