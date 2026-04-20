@@ -31,6 +31,19 @@ function loadConfig() {
     throw new Error("config.jobs must contain at least one job");
   }
 
+  const globalPandocArgs = Array.isArray(config.pandocArgs) && config.pandocArgs.length > 0 ? config.pandocArgs : ["-t", "plain"];
+  const globalConversionMode = config.conversionMode || "mammoth";
+  const globalCompareMode = config.compareMode || "full";
+  const globalWindowExtra = Number.isInteger(config.windowExtra) ? config.windowExtra : 0;
+  const globalNormalise = {
+    collapseWhitespace: true,
+    normaliseQuotes: true,
+    ignoreDashes: true,
+    stripTrailingSpaces: true,
+    unwrapLines: true,
+    ...(config.normalise || {}),
+  };
+
   const jobs = config.jobs.map((job) => {
     if (!job.id || !job.primaryDocx || !job.outputDir) {
       throw new Error(`Invalid job config: ${JSON.stringify(job)}`);
@@ -40,19 +53,15 @@ function loadConfig() {
 
     return {
       ...job,
-      pandocArgs: Array.isArray(job.pandocArgs) && job.pandocArgs.length > 0 ? job.pandocArgs : ["-t", "plain"],
-      conversionMode: job.conversionMode || "mammoth",
-      compareMode: job.compareMode || "full",
-      windowExtra: Number.isInteger(job.windowExtra) ? job.windowExtra : 0,
+      pandocArgs: Array.isArray(job.pandocArgs) && job.pandocArgs.length > 0 ? job.pandocArgs : globalPandocArgs,
+      conversionMode: job.conversionMode || globalConversionMode,
+      compareMode: job.compareMode || globalCompareMode,
+      windowExtra: Number.isInteger(job.windowExtra) ? job.windowExtra : globalWindowExtra,
       primaryDocx: asAbsolute(job.primaryDocx),
       secondaryText: asAbsolute(secondaryTextValue),
       outputDir: asAbsolute(job.outputDir),
       normalise: {
-        collapseWhitespace: true,
-        normaliseQuotes: true,
-        ignoreDashes: true,
-        stripTrailingSpaces: true,
-        unwrapLines: true,
+        ...globalNormalise,
         ...(job.normalise || {}),
       },
     };

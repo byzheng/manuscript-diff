@@ -39,6 +39,7 @@ Important fields:
 - `pandocPath`: command or full path to pandoc.
 - `debounceMs`: delay after file-change bursts.
 - `pollFallbackMs`: browser polling interval if SSE is unavailable.
+- `conversionMode`, `compareMode`, `windowExtra`, `pandocArgs`, `normalise`: optional shared defaults applied to all jobs.
 - `jobs`: one or more comparison jobs.
 
 Per job:
@@ -53,6 +54,8 @@ Per job:
 - `windowExtra`: extra primary paragraphs to include beyond secondary paragraph count (default `0`).
 - `pandocArgs`: typically `["-t", "plain"]`.
 - `normalise`: text normalisation toggles.
+
+Job values override top-level shared defaults when both are provided.
 
 `conversionMode` details:
 
@@ -108,6 +111,8 @@ Open:
 - `GET /` job list page
 - `GET /job/:id` job page
 - `GET /api/job/:id/status` status JSON
+- `GET /api/job/:id/effective-config` merged/effective config for one job (after shared-default inheritance)
+- `GET /api/effective-config` merged/effective config for all jobs
 - `GET /api/job/:id/diff` diff JSON (inline + side-by-side HTML)
 - `POST /api/job/:id/refresh` force immediate reconvert + rediff for one job
 - `GET /events` SSE stream for updates

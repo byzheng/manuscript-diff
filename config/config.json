@@ -3,23 +3,23 @@
   "pandocPath": "pandoc",
   "debounceMs": 500,
   "pollFallbackMs": 2000,
+  "conversionMode": "mammoth",
+  "compareMode": "subset",
+  "windowExtra": 0,
+  "pandocArgs": ["-t", "plain"],
+  "normalise": {
+    "collapseWhitespace": true,
+    "normaliseQuotes": true,
+    "stripTrailingSpaces": true,
+    "unwrapLines": true
+  },
   "jobs": [
     {
       "id": "paper1",
       "name": "Paper 1",
       "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/122-GPCGMWheatBarley/GP-CGM-Wheat-Barley.docx",
       "secondaryText": "",
-      "outputDir": "./data/paper1",
-      "conversionMode": "mammoth",
-      "compareMode": "subset",
-      "windowExtra": 0,
-      "pandocArgs": ["-t", "plain"],
-      "normalise": {
-        "collapseWhitespace": true,
-        "normaliseQuotes": true,
-        "stripTrailingSpaces": true,
-        "unwrapLines": true
-      }
+      "outputDir": "./data/paper1"
     }
   ]
 }

@@ -145,6 +145,33 @@ async function createApp() {
     });
   });
 
+  app.get("/api/job/:id/effective-config", (req, res) => {
+    const job = manager.getJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Unknown job id" });
+      return;
+    }
+
+    res.json({
+      id: job.id,
+      name: job.name,
+      config: job.config,
+    });
+  });
+
+  app.get("/api/effective-config", (req, res) => {
+    const jobs = manager.getJobList().map((item) => {
+      const job = manager.getJob(item.id);
+      return {
+        id: item.id,
+        name: item.name,
+        config: job ? job.config : null,
+      };
+    });
+
+    res.json({ jobs });
+  });
+
   app.get("/api/job/:id/diff", (req, res) => {
     const job = manager.getJob(req.params.id);
     if (!job) {
