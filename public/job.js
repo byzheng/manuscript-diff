@@ -165,6 +165,11 @@ function renderParagraphs(state) {
       const index = Number(button.dataset.index);
       setStartParagraph(index, { openCompareTab: false }).catch((error) => setError(error.message));
     });
+
+    button.addEventListener("dblclick", () => {
+      const index = Number(button.dataset.index);
+      setStartParagraph(index, { openCompareTab: true }).catch((error) => setError(error.message));
+    });
   });
 }
 
