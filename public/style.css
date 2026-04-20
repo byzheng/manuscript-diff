@@ -133,6 +133,10 @@ button:hover {
   z-index: 30;
 }
 
+.window-extra-group {
+  width: 190px;
+}
+
 .tabs {
   display: flex;
   gap: 8px;

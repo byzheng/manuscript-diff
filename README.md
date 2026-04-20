@@ -50,6 +50,7 @@ Per job:
 - `outputDir`: where `primary.txt` and `diff.html` are written.
 - `conversionMode`: `mammoth` (recommended for paragraph reliability) or `pandoc`.
 - `compareMode`: `full` (default) or `subset`.
+- `windowExtra`: extra primary paragraphs to include beyond secondary paragraph count (default `0`).
 - `pandocArgs`: typically `["-t", "plain"]`.
 - `normalise`: text normalisation toggles.
 
@@ -69,6 +70,12 @@ Per job:
 
 - `full`: compares the full converted primary text against `secondaryText`.
 - `subset`: treats `secondaryText` as an excerpt and finds the best matching paragraph window in primary text before computing the word diff. This reduces noisy deletions when entire leading/trailing paragraphs are absent in `secondaryText`.
+
+Compare window behavior in the editor view:
+
+- The app counts secondary paragraphs.
+- It compares only a limited primary range starting from the selected start paragraph.
+- Range size is `secondary paragraph count + windowExtra`.
 
 ## Run
 

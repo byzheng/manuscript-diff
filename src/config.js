@@ -37,6 +37,7 @@ function loadConfig() {
       pandocArgs: Array.isArray(job.pandocArgs) && job.pandocArgs.length > 0 ? job.pandocArgs : ["-t", "plain"],
       conversionMode: job.conversionMode || "mammoth",
       compareMode: job.compareMode || "full",
+      windowExtra: Number.isInteger(job.windowExtra) ? job.windowExtra : 0,
       primaryDocx: asAbsolute(job.primaryDocx),
       secondaryText: asAbsolute(job.secondaryText),
       outputDir: asAbsolute(job.outputDir),

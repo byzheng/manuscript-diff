@@ -12,6 +12,7 @@
       "outputDir": "./data/paper1",
       "conversionMode": "mammoth",
       "compareMode": "subset",
+      "windowExtra": 0,
       "pandocArgs": ["-t", "plain"],
       "normalise": {
         "collapseWhitespace": true,

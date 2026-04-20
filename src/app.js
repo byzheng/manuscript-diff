@@ -53,6 +53,11 @@ function renderJobPage(jobId, pollFallbackMs) {
         <button class="tab-btn btn btn-outline-primary btn-sm" type="button" data-tab="secondary">Secondary</button>
         <button class="tab-btn btn btn-outline-primary btn-sm" type="button" data-tab="compare">Diff</button>
         <button id="refresh-btn" class="btn btn-success btn-sm" type="button">Refresh</button>
+        <div class="input-group input-group-sm window-extra-group">
+          <span class="input-group-text">Extra</span>
+          <input id="window-extra-input" type="number" min="0" max="50" step="1" class="form-control" value="0" />
+          <button id="apply-window-extra-btn" class="btn btn-outline-secondary" type="button">Apply</button>
+        </div>
       </div>
 
       <div class="search-row mt-2 mt-lg-0 ms-lg-2">
@@ -69,6 +74,8 @@ function renderJobPage(jobId, pollFallbackMs) {
       <span id="status" class="status">STARTING</span>
       <span id="updated-at">Last update: --</span>
       <span id="start-badge" class="start-badge">Start paragraph: --</span>
+      <span id="secondary-count-badge" class="start-badge">Secondary paragraphs: --</span>
+      <span id="range-badge" class="start-badge">Range: --</span>
       <span id="error" class="error"></span>
     </section>
 
@@ -196,6 +203,21 @@ async function createApp() {
       res.json({ ok: true, state: manager.getEditorState(req.params.id) });
     } catch (error) {
       res.status(400).json({ error: error.message || "Failed to set secondary text" });
+    }
+  });
+
+  app.post("/api/job/:id/window-extra", async (req, res) => {
+    const job = manager.getJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Unknown job id" });
+      return;
+    }
+
+    try {
+      await manager.setWindowExtra(req.params.id, req.body.windowExtra);
+      res.json({ ok: true, state: manager.getEditorState(req.params.id) });
+    } catch (error) {
+      res.status(400).json({ error: error.message || "Failed to set window extra" });
     }
   });
 

@@ -4,10 +4,14 @@ const pollMs = Number(window.__POLL_MS__) || 2000;
 const statusEl = document.getElementById("status");
 const updatedAtEl = document.getElementById("updated-at");
 const startBadgeEl = document.getElementById("start-badge");
+const secondaryCountBadgeEl = document.getElementById("secondary-count-badge");
+const rangeBadgeEl = document.getElementById("range-badge");
 const errorEl = document.getElementById("error");
 
 const refreshBtn = document.getElementById("refresh-btn");
 const applySecondaryBtn = document.getElementById("apply-secondary-btn");
+const windowExtraInputEl = document.getElementById("window-extra-input");
+const applyWindowExtraBtn = document.getElementById("apply-window-extra-btn");
 
 const paragraphListEl = document.getElementById("primary-paragraphs");
 const paragraphSearchInputEl = document.getElementById("paragraph-search-input");
@@ -54,6 +58,19 @@ function setActiveTab(nextTab) {
   Object.entries(tabPanels).forEach(([name, panel]) => {
     panel.classList.toggle("active", name === nextTab);
   });
+
+  if (nextTab === "primary") {
+    window.requestAnimationFrame(() => {
+      if (!editorState || !Number.isInteger(editorState.startParagraph)) {
+        return;
+      }
+
+      const selected = paragraphListEl.querySelector(`.paragraph-item[data-index=\"${editorState.startParagraph}\"]`);
+      if (selected) {
+        selected.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+  }
 }
 
 function renderParagraphs(state) {
@@ -87,7 +104,15 @@ function renderState(state) {
   setStatus(state.status);
   updatedAtEl.textContent = `Last update: ${state.updatedAt || "--"}`;
   startBadgeEl.textContent = `Start paragraph: ${Number.isInteger(state.startParagraph) ? state.startParagraph + 1 : "--"}`;
+  secondaryCountBadgeEl.textContent = `Secondary paragraphs: ${Number.isInteger(state.secondaryParagraphCount) ? state.secondaryParagraphCount : 0}`;
+  const range = state.compareRange || { start: 0, end: -1, count: 0 };
+  rangeBadgeEl.textContent =
+    range.count > 0 ? `Range: ${range.start + 1}-${range.end + 1} (${range.count})` : "Range: empty";
   setError(state.error || "");
+
+  if (document.activeElement !== windowExtraInputEl) {
+    windowExtraInputEl.value = String(Number.isInteger(state.windowExtra) ? state.windowExtra : 0);
+  }
 
   if (document.activeElement !== secondaryInputEl) {
     secondaryInputEl.value = state.secondaryText || "";
@@ -204,6 +229,23 @@ async function applySecondaryText() {
   }
 }
 
+async function applyWindowExtra() {
+  applyWindowExtraBtn.disabled = true;
+  const original = applyWindowExtraBtn.textContent;
+  applyWindowExtraBtn.textContent = "Applying...";
+
+  try {
+    const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/window-extra`, {
+      windowExtra: Number(windowExtraInputEl.value || 0),
+    });
+    renderState(data.state);
+    setActiveTab("compare");
+  } finally {
+    applyWindowExtraBtn.disabled = false;
+    applyWindowExtraBtn.textContent = original;
+  }
+}
+
 function setupSse() {
   if (!window.EventSource) {
     return false;
@@ -241,6 +283,17 @@ refreshBtn.addEventListener("click", () => {
 
 applySecondaryBtn.addEventListener("click", () => {
   applySecondaryText().catch((error) => setError(error.message));
+});
+
+applyWindowExtraBtn.addEventListener("click", () => {
+  applyWindowExtra().catch((error) => setError(error.message));
+});
+
+windowExtraInputEl.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    applyWindowExtra().catch((error) => setError(error.message));
+  }
 });
 
 paragraphSearchBtn.addEventListener("click", () => {

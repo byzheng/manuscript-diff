@@ -28,6 +28,9 @@ class JobManager {
         primaryNormalized: "",
         primaryParagraphs: [],
         startParagraph: 0,
+        windowExtra: Number.isInteger(jobConfig.windowExtra) ? jobConfig.windowExtra : 0,
+        secondaryParagraphCount: 0,
+        compareRange: { start: 0, end: -1, count: 0 },
         secondaryOverride: null,
         diff: {
           inlineHtml: "",
@@ -162,13 +165,15 @@ class JobManager {
 
     try {
       const secondaryText = this.getSecondaryText(job);
-      const diff = this.computeDiffFromCurrentState(job, secondaryText);
-      this.persistDiff(job, diff, diffHtmlPath);
+      const result = this.computeDiffFromCurrentState(job, secondaryText);
+      this.persistDiff(job, result.diff, diffHtmlPath);
+      job.secondaryParagraphCount = result.secondaryParagraphCount;
+      job.compareRange = result.compareRange;
       job.status = "ok";
       job.error = null;
       job.updatedAt = new Date().toISOString();
 
-      console.log(`[job:${jobId}] updated, changes=${diff.changes}`);
+      console.log(`[job:${jobId}] updated, changes=${result.diff.changes}`);
       this.emitUpdate(jobId);
     } catch (error) {
       this.setError(jobId, `Diff failed: ${error.message}`);
@@ -184,12 +189,30 @@ class JobManager {
   }
 
   computeDiffFromCurrentState(job, secondaryText) {
-    const fromStart = job.primaryParagraphs.slice(job.startParagraph).join("\n\n") || job.primaryNormalized;
+    const normalisedSecondary = normaliseText(String(secondaryText || ""), job.config.normalise || {});
+    const secondaryParagraphs = splitParagraphs(normalisedSecondary);
+    const secondaryParagraphCount = secondaryParagraphs.length;
 
-    return buildDiff(fromStart, secondaryText, {
+    const totalPrimary = job.primaryParagraphs.length;
+    const safeStart = Math.min(Math.max(0, job.startParagraph), Math.max(0, totalPrimary - 1));
+    const extra = Math.max(0, Number(job.windowExtra) || 0);
+    const desiredCount = secondaryParagraphCount > 0 ? secondaryParagraphCount + extra : 0;
+    const actualCount = totalPrimary > 0 ? Math.max(0, Math.min(desiredCount, totalPrimary - safeStart)) : 0;
+
+    const start = safeStart;
+    const end = actualCount > 0 ? safeStart + actualCount - 1 : -1;
+    const selectedPrimary = actualCount > 0 ? job.primaryParagraphs.slice(start, end + 1).join("\n\n") : "";
+
+    const diff = buildDiff(selectedPrimary, secondaryText, {
       normalise: job.config.normalise || {},
       compareMode: "full",
     });
+
+    return {
+      diff,
+      secondaryParagraphCount,
+      compareRange: { start, end, count: actualCount },
+    };
   }
 
   persistDiff(job, diff, diffHtmlPath) {
@@ -210,12 +233,14 @@ class JobManager {
     this.emitUpdate(jobId);
 
     const secondaryText = this.getSecondaryText(job);
-    const diff = this.computeDiffFromCurrentState(job, secondaryText);
-    this.persistDiff(job, diff, diffHtmlPath);
+    const result = this.computeDiffFromCurrentState(job, secondaryText);
+    this.persistDiff(job, result.diff, diffHtmlPath);
+    job.secondaryParagraphCount = result.secondaryParagraphCount;
+    job.compareRange = result.compareRange;
 
     job.status = "ok";
     job.updatedAt = new Date().toISOString();
-    console.log(`[job:${jobId}] trigger=${reason} updated, changes=${diff.changes}`);
+    console.log(`[job:${jobId}] trigger=${reason} updated, changes=${result.diff.changes}`);
     this.emitUpdate(jobId);
   }
 
@@ -244,6 +269,21 @@ class JobManager {
     await this.compareOnly(jobId, "set-secondary-text");
   }
 
+  async setWindowExtra(jobId, windowExtra) {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error("Unknown job id");
+    }
+
+    const next = Number(windowExtra);
+    if (!Number.isInteger(next) || next < 0 || next > 50) {
+      throw new Error("Invalid windowExtra");
+    }
+
+    job.windowExtra = next;
+    await this.compareOnly(jobId, "set-window-extra");
+  }
+
   async runCompare(jobId, payload = {}) {
     const job = this.jobs.get(jobId);
     if (!job) {
@@ -259,6 +299,13 @@ class JobManager {
 
     if (payload.secondaryText !== undefined) {
       job.secondaryOverride = String(payload.secondaryText || "");
+    }
+
+    if (payload.windowExtra !== undefined) {
+      const next = Number(payload.windowExtra);
+      if (Number.isInteger(next) && next >= 0 && next <= 50) {
+        job.windowExtra = next;
+      }
     }
 
     await this.compareOnly(jobId, "api-compare");
@@ -277,6 +324,9 @@ class JobManager {
       error: job.error,
       updatedAt: job.updatedAt,
       startParagraph: job.startParagraph,
+      windowExtra: job.windowExtra,
+      secondaryParagraphCount: job.secondaryParagraphCount,
+      compareRange: job.compareRange,
       paragraphs: job.primaryParagraphs.map((text, index) => ({ index, text })),
       secondaryText: this.getSecondaryText(job),
       diff: {
