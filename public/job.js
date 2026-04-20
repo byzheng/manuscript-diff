@@ -432,6 +432,9 @@ async function initPage() {
   setActiveTab("primary");
   await fetchEditorState();
   await restorePersistedEditorState();
+  window.setTimeout(() => {
+    centerSelectedParagraphInViewport();
+  }, 0);
 
   if (!setupSse()) {
     window.setInterval(() => {
