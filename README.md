@@ -63,6 +63,7 @@ Per job:
 
 - `collapseWhitespace`: collapse repeated spaces while preserving paragraph breaks.
 - `normaliseQuotes`: convert smart quotes to straight quotes.
+- `ignoreDashes`: treat hyphen/dash variants as equivalent separators so dash style differences are ignored.
 - `stripTrailingSpaces`: remove trailing spaces at line ends.
 - `unwrapLines`: convert hard-wrapped single newlines inside a paragraph into spaces (useful for pandoc plain-text wrapping).
 

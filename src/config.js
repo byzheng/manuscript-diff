@@ -44,6 +44,7 @@ function loadConfig() {
       normalise: {
         collapseWhitespace: true,
         normaliseQuotes: true,
+        ignoreDashes: true,
         stripTrailingSpaces: true,
         unwrapLines: true,
         ...(job.normalise || {}),

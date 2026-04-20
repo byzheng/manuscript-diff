@@ -7,6 +7,11 @@ function normaliseQuotes(text) {
     .replace(/[\u2032\u2033]/g, '"');
 }
 
+function normaliseDashes(text) {
+  // Treat dash variants from DOCX conversion as non-semantic separators.
+  return text.replace(/[\-\u00AD\u2010\u2011\u2012\u2013\u2014\u2015\u2212]+/g, " ");
+}
+
 function collapseWhitespaceKeepNewlines(text) {
   return text
     .replace(/[^\S\r\n]+/g, " ")
@@ -91,6 +96,10 @@ function applyNormalisation(input, options) {
 
   if (options.normaliseQuotes) {
     output = normaliseQuotes(output);
+  }
+
+  if (options.ignoreDashes) {
+    output = normaliseDashes(output);
   }
 
   if (options.stripTrailingSpaces) {
