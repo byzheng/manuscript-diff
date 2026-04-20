@@ -1,0 +1,149 @@
+:root {
+  --bg: #f6f5f0;
+  --card: #ffffff;
+  --ink: #202124;
+  --muted: #5f6368;
+  --ok: #2e7d32;
+  --busy: #1565c0;
+  --error: #b71c1c;
+  --insert-bg: #dff3df;
+  --delete-bg: #ffe1e1;
+  --border: #d8d6ca;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top right, #e8ecdf, var(--bg));
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.layout {
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: 16px;
+}
+
+a {
+  color: #0d47a1;
+}
+
+.job-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.job-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.status {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: #ececec;
+}
+
+.status-ok {
+  background: #ddf2de;
+  color: var(--ok);
+}
+
+.status-converting,
+.status-diffing,
+.status-starting {
+  background: #deebff;
+  color: var(--busy);
+}
+
+.status-error {
+  background: #ffd9d7;
+  color: var(--error);
+}
+
+.meta-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+button {
+  border: 1px solid var(--border);
+  background: var(--card);
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #f4f4f4;
+}
+
+.error {
+  color: var(--error);
+  font-weight: 700;
+}
+
+.diff-inline,
+.diff-sxs {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.diff {
+  white-space: pre-wrap;
+  line-height: 1.65;
+  font-size: 1rem;
+}
+
+.ins {
+  background: var(--insert-bg);
+  text-decoration: underline;
+}
+
+.del {
+  background: var(--delete-bg);
+  text-decoration: line-through;
+}
+
+.diff-sxs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.diff-sxs .col {
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .diff-sxs {
+    grid-template-columns: 1fr;
+  }
+}

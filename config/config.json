@@ -1,0 +1,23 @@
+{
+  "port": 3000,
+  "pandocPath": "pandoc",
+  "debounceMs": 500,
+  "pollFallbackMs": 2000,
+  "jobs": [
+    {
+      "id": "paper1",
+      "name": "Paper 1",
+      "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/122-GPCGMWheatBarley/GP-CGM-Wheat-Barley.docx",
+      "secondaryText": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/122-GPCGMWheatBarley/modified.txt",
+      "outputDir": "./data/paper1",
+      "compareMode": "subset",
+      "pandocArgs": ["-t", "plain"],
+      "normalise": {
+        "collapseWhitespace": true,
+        "normaliseQuotes": true,
+        "stripTrailingSpaces": true,
+        "unwrapLines": true
+      }
+    }
+  ]
+}
