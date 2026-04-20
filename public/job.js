@@ -146,6 +146,22 @@ function setActiveTab(nextTab) {
       centerSelectedParagraphInViewport();
     }, 0);
   }
+
+  if (nextTab === "compare") {
+    window.setTimeout(() => {
+      const header = document.querySelector(".top-menu");
+      const headerHeight = header ? header.getBoundingClientRect().height : 0;
+      const panel = tabPanels.compare;
+      const rect = panel.getBoundingClientRect();
+      const currentTop = window.scrollY || window.pageYOffset;
+      const targetTop = currentTop + rect.top - headerHeight - 8;
+
+      window.scrollTo({
+        top: Math.max(0, targetTop),
+        behavior: "smooth",
+      });
+    }, 0);
+  }
 }
 
 function renderParagraphs(state) {
