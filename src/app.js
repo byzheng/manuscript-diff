@@ -144,6 +144,7 @@ function renderJobPage(jobId, pollFallbackMs) {
       <span id="start-badge" class="start-badge">Start paragraph: --</span>
       <span id="secondary-count-badge" class="start-badge">Secondary paragraphs: --</span>
       <span id="range-badge" class="start-badge">Range: --</span>
+      <span id="primary-docx-path" class="path-badge">Primary DOCX: --</span>
       <span id="error" class="error"></span>
     </section>
 

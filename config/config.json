@@ -15,11 +15,11 @@
   },
   "jobs": [
     {
-      "id": "paper1",
-      "name": "Paper 1",
+      "id": "gpcgm-wheat-barley",
+      "name": "GPCGM Wheat Barley",
       "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/122-GPCGMWheatBarley/GP-CGM-Wheat-Barley.docx",
       "secondaryText": "",
-      "outputDir": "./data/paper1"
+      "outputDir": "./data/gpcgm-wheat-barley"
     }
   ]
 }

@@ -359,6 +359,7 @@ class JobManager {
     return {
       id: job.id,
       name: job.name,
+      primaryDocx: job.config.primaryDocx,
       status: job.status,
       error: job.error,
       updatedAt: job.updatedAt,

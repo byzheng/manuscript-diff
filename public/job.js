@@ -6,6 +6,7 @@ const updatedAtEl = document.getElementById("updated-at");
 const startBadgeEl = document.getElementById("start-badge");
 const secondaryCountBadgeEl = document.getElementById("secondary-count-badge");
 const rangeBadgeEl = document.getElementById("range-badge");
+const primaryDocxPathEl = document.getElementById("primary-docx-path");
 const errorEl = document.getElementById("error");
 
 const refreshBtn = document.getElementById("refresh-btn");
@@ -242,6 +243,8 @@ function renderState(state) {
   const range = state.compareRange || { start: 0, end: -1, count: 0 };
   rangeBadgeEl.textContent =
     range.count > 0 ? `Range: ${range.start + 1}-${range.end + 1} (${range.count})` : "Range: empty";
+  primaryDocxPathEl.textContent = `Primary DOCX: ${state.primaryDocx || "--"}`;
+  primaryDocxPathEl.title = state.primaryDocx || "";
   setError(state.error || "");
 
   if (document.activeElement !== windowExtraInputEl) {

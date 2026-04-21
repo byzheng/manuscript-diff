@@ -168,6 +168,21 @@ a {
   color: #27466b;
 }
 
+.path-badge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid #d1d9e6;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.82rem;
+  font-family: "Consolas", "SFMono-Regular", "Menlo", monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .meta-row {
   display: flex;
   gap: 12px;
