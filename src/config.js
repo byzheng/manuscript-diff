@@ -34,6 +34,7 @@ function loadConfig() {
   const globalPandocArgs = Array.isArray(config.pandocArgs) && config.pandocArgs.length > 0 ? config.pandocArgs : ["-t", "plain"];
   const globalConversionMode = config.conversionMode || "mammoth";
   const globalCompareMode = config.compareMode || "full";
+  const globalDiffMode = ["word", "hybrid", "char"].includes(config.diffMode) ? config.diffMode : "word";
   const globalWindowExtra = Number.isInteger(config.windowExtra) ? config.windowExtra : 0;
   const globalNormalise = {
     collapseWhitespace: true,
@@ -56,6 +57,7 @@ function loadConfig() {
       pandocArgs: Array.isArray(job.pandocArgs) && job.pandocArgs.length > 0 ? job.pandocArgs : globalPandocArgs,
       conversionMode: job.conversionMode || globalConversionMode,
       compareMode: job.compareMode || globalCompareMode,
+      diffMode: ["word", "hybrid", "char"].includes(job.diffMode) ? job.diffMode : globalDiffMode,
       windowExtra: Number.isInteger(job.windowExtra) ? job.windowExtra : globalWindowExtra,
       primaryDocx: asAbsolute(job.primaryDocx),
       secondaryText: asAbsolute(secondaryTextValue),

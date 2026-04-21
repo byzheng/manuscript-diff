@@ -1,4 +1,4 @@
-const { diffWordsWithSpace } = require("diff");
+const { diffWordsWithSpace, diffChars } = require("diff");
 
 function normaliseQuotes(text) {
   return text
@@ -166,6 +166,45 @@ function renderSideBySide(parts) {
   }
 
   return { left, right };
+}
+
+function buildHybridParts(primaryText, secondaryText) {
+  const wordParts = diffWordsWithSpace(primaryText, secondaryText);
+  const hybridParts = [];
+
+  for (let i = 0; i < wordParts.length; i += 1) {
+    const current = wordParts[i];
+    const next = wordParts[i + 1];
+
+    const isPair =
+      next &&
+      ((current.removed && next.added) || (current.added && next.removed));
+
+    if (!isPair) {
+      hybridParts.push(current);
+      continue;
+    }
+
+    const removed = current.removed ? current : next;
+    const added = current.added ? current : next;
+    const charParts = diffChars(removed.value, added.value);
+    hybridParts.push(...charParts);
+    i += 1;
+  }
+
+  return hybridParts;
+}
+
+function buildParts(primaryText, secondaryText, diffMode) {
+  if (diffMode === "char") {
+    return diffChars(primaryText, secondaryText);
+  }
+
+  if (diffMode === "hybrid") {
+    return buildHybridParts(primaryText, secondaryText);
+  }
+
+  return diffWordsWithSpace(primaryText, secondaryText);
 }
 
 function splitParagraphs(text) {
@@ -388,11 +427,12 @@ function choosePrimarySegment(normalisedPrimary, normalisedSecondary, compareMod
 function buildDiff(primaryText, secondaryText, options) {
   const normaliseOptions = options.normalise || {};
   const compareMode = options.compareMode || "full";
+  const diffMode = options.diffMode || "word";
   const normalisedPrimary = applyNormalisation(primaryText, normaliseOptions);
   const normalisedSecondary = applyNormalisation(secondaryText, normaliseOptions);
 
   const { selectedPrimary, alignment } = choosePrimarySegment(normalisedPrimary, normalisedSecondary, compareMode);
-  const parts = diffWordsWithSpace(selectedPrimary, normalisedSecondary);
+  const parts = buildParts(selectedPrimary, normalisedSecondary, diffMode);
 
   const inlineHtml = renderInlineDiff(parts);
   const sideBySide = renderSideBySide(parts);
@@ -405,6 +445,7 @@ function buildDiff(primaryText, secondaryText, options) {
     primaryLength: selectedPrimary.length,
     secondaryLength: normalisedSecondary.length,
     alignment,
+    mode: diffMode,
   };
 }
 

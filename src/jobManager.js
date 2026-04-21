@@ -28,6 +28,7 @@ class JobManager {
         primaryNormalized: "",
         primaryParagraphs: [],
         startParagraph: 0,
+        diffMode: ["word", "hybrid", "char"].includes(jobConfig.diffMode) ? jobConfig.diffMode : "word",
         windowExtra: Number.isInteger(jobConfig.windowExtra) ? jobConfig.windowExtra : 0,
         secondaryParagraphCount: 0,
         compareRange: { start: 0, end: -1, count: 0 },
@@ -221,6 +222,7 @@ class JobManager {
     const diff = buildDiff(selectedPrimary, secondaryText, {
       normalise: job.config.normalise || {},
       compareMode: "full",
+      diffMode: job.diffMode,
     });
 
     return {
@@ -299,6 +301,21 @@ class JobManager {
     await this.compareOnly(jobId, "set-window-extra");
   }
 
+  async setDiffMode(jobId, diffMode) {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error("Unknown job id");
+    }
+
+    const next = String(diffMode || "").toLowerCase();
+    if (!["word", "hybrid", "char"].includes(next)) {
+      throw new Error("Invalid diffMode");
+    }
+
+    job.diffMode = next;
+    await this.compareOnly(jobId, "set-diff-mode");
+  }
+
   async runCompare(jobId, payload = {}) {
     const job = this.jobs.get(jobId);
     if (!job) {
@@ -323,6 +340,13 @@ class JobManager {
       }
     }
 
+    if (payload.diffMode !== undefined) {
+      const next = String(payload.diffMode || "").toLowerCase();
+      if (["word", "hybrid", "char"].includes(next)) {
+        job.diffMode = next;
+      }
+    }
+
     await this.compareOnly(jobId, "api-compare");
   }
 
@@ -339,6 +363,7 @@ class JobManager {
       error: job.error,
       updatedAt: job.updatedAt,
       startParagraph: job.startParagraph,
+      diffMode: job.diffMode,
       windowExtra: job.windowExtra,
       secondaryParagraphCount: job.secondaryParagraphCount,
       compareRange: job.compareRange,
@@ -350,6 +375,7 @@ class JobManager {
         changes: job.diff.changes,
         primaryLength: job.diff.primaryLength,
         secondaryLength: job.diff.secondaryLength,
+        mode: job.diff.mode || job.diffMode,
       },
     };
   }

@@ -494,6 +494,63 @@ button:hover {
   box-shadow: var(--panel-shadow);
 }
 
+.diff-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.diff-controls-label {
+  margin: 0;
+  color: #334155;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.diff-mode-toggle {
+  display: inline-flex;
+  align-items: stretch;
+  background: #edf2fb;
+  border: 1px solid #cfdbef;
+  border-radius: 10px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.diff-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.diff-mode-btn:hover {
+  background: #dde8f9;
+  color: #1e3a8a;
+}
+
+.diff-mode-btn.active {
+  background: var(--menu-accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.25);
+}
+
+.diff-mode-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 0.2rem var(--ring);
+}
+
 .diff {
   white-space: pre-wrap;
   line-height: 1.72;

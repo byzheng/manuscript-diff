@@ -162,6 +162,14 @@ function renderJobPage(jobId, pollFallbackMs) {
     </section>
 
     <section class="tab-panel" id="panel-compare">
+      <div class="diff-controls">
+        <span class="diff-controls-label">Diff mode</span>
+        <div class="diff-mode-toggle" role="group" aria-label="Diff mode switch">
+          <button type="button" class="diff-mode-btn active" data-diff-mode="word">Word</button>
+          <button type="button" class="diff-mode-btn" data-diff-mode="hybrid">Word + char detail</button>
+          <button type="button" class="diff-mode-btn" data-diff-mode="char">Character</button>
+        </div>
+      </div>
       <div id="diff-wrap" class="diff-inline"></div>
     </section>
   </main>
@@ -318,6 +326,21 @@ async function createApp() {
       res.json({ ok: true, state: manager.getEditorState(req.params.id) });
     } catch (error) {
       res.status(400).json({ error: error.message || "Failed to set window extra" });
+    }
+  });
+
+  app.post("/api/job/:id/diff-mode", async (req, res) => {
+    const job = manager.getJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Unknown job id" });
+      return;
+    }
+
+    try {
+      await manager.setDiffMode(req.params.id, req.body.diffMode);
+      res.json({ ok: true, state: manager.getEditorState(req.params.id) });
+    } catch (error) {
+      res.status(400).json({ error: error.message || "Failed to set diff mode" });
     }
   });
 

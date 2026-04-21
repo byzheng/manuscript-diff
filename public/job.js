@@ -18,6 +18,7 @@ const paragraphSearchInputEl = document.getElementById("paragraph-search-input")
 const paragraphSearchBtn = document.getElementById("paragraph-search-btn");
 const secondaryInputEl = document.getElementById("secondary-input");
 const secondarySyncStatusEl = document.getElementById("secondary-sync-status");
+const diffModeButtonEls = Array.from(document.querySelectorAll(".diff-mode-btn"));
 const diffWrapEl = document.getElementById("diff-wrap");
 
 const tabButtons = Array.from(document.querySelectorAll(".tab-btn"));
@@ -103,6 +104,14 @@ async function restorePersistedEditorState() {
       await applySecondaryText({ openCompareTab: false, silent: true });
     } else {
       setSecondarySyncStatus("Synced", "ok");
+    }
+  }
+
+  if (typeof saved.diffMode === "string" && (!editorState || saved.diffMode !== editorState.diffMode)) {
+    try {
+      await setDiffMode(saved.diffMode, { openCompareTab: false });
+    } catch (_error) {
+      // Ignore stale values from older versions.
     }
   }
 }
@@ -244,6 +253,13 @@ function renderState(state) {
     setSecondarySyncStatus("Synced", "ok");
   }
 
+  if (diffModeButtonEls.length > 0) {
+    const mode = state.diffMode || "word";
+    diffModeButtonEls.forEach((button) => {
+      button.classList.toggle("active", button.dataset.diffMode === mode);
+    });
+  }
+
   renderParagraphs(state);
   renderDiff(state);
 
@@ -302,6 +318,25 @@ async function setStartParagraph(index, options = {}) {
 
   renderState(data.state);
   patchPersistedEditorState({ startParagraph: data.state.startParagraph });
+  if (openCompareTab) {
+    setActiveTab("compare");
+  }
+}
+
+async function setDiffMode(diffMode, options = {}) {
+  const { openCompareTab = false } = options;
+  const next = String(diffMode || "").toLowerCase();
+  if (!["word", "hybrid", "char"].includes(next)) {
+    return;
+  }
+
+  const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/diff-mode`, {
+    diffMode: next,
+  });
+
+  renderState(data.state);
+  patchPersistedEditorState({ diffMode: data.state.diffMode || "word" });
+
   if (openCompareTab) {
     setActiveTab("compare");
   }
@@ -476,6 +511,12 @@ paragraphSearchInputEl.addEventListener("keydown", (event) => {
     event.preventDefault();
     findNextParagraphByKeyword();
   }
+});
+
+diffModeButtonEls.forEach((button) => {
+  button.addEventListener("click", () => {
+    setDiffMode(button.dataset.diffMode, { openCompareTab: false }).catch((error) => setError(error.message));
+  });
 });
 
 tabButtons.forEach((button) => {
