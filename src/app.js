@@ -28,6 +28,71 @@ function renderHomePage(jobs) {
     <h1>Manuscript Diff Monitor</h1>
     <p>Choose a configured job.</p>
     <ul class="job-list">${listItems}</ul>
+
+    <section class="home-guide">
+      <h2>Quick Start</h2>
+      <p>Edit your manuscript in Word as usual, then copy the revised excerpt into the Secondary tab and open Diff to review the word-level changes.</p>
+
+      <div class="guide-grid">
+        <article class="guide-card">
+          <h3>Why Jobs Are Preconfigured</h3>
+          <p>Jobs are fixed in config for security and consistency. This limits file access to approved paths and avoids accidentally diffing or exposing unrelated local files.</p>
+        </article>
+
+        <article class="guide-card">
+          <h3>Tabs</h3>
+          <ul>
+            <li><strong>Primary</strong>: choose the start paragraph from the converted Word text.</li>
+            <li><strong>Secondary</strong>: paste or edit your revised text snippet.</li>
+            <li><strong>Diff</strong>: inspect the comparison result for the selected range.</li>
+          </ul>
+        </article>
+      </div>
+
+      <p><a class="help-link" href="/help">Open full help page</a></p>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function renderHelpPage() {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Help | Manuscript Diff Monitor</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="layout">
+    <h1>How To Use Manuscript Diff Monitor</h1>
+    <p><a href="/">Back to jobs</a></p>
+
+    <section class="home-guide">
+      <h2>Workflow</h2>
+      <ol>
+        <li>Open a configured job from the home page.</li>
+        <li>In <strong>Primary</strong>, click the paragraph where comparison should start.</li>
+        <li>In <strong>Secondary</strong>, paste your revised text (from your new draft).</li>
+        <li>Open <strong>Diff</strong> to inspect additions/deletions for that range.</li>
+      </ol>
+    </section>
+
+    <section class="home-guide">
+      <h2>Why Preconfigured Jobs</h2>
+      <p>Preconfigured jobs are a security guardrail. The app only reads files listed in configuration, which helps prevent accidental access to sensitive folders and keeps output predictable for each manuscript.</p>
+    </section>
+
+    <section class="home-guide">
+      <h2>Tab Summary</h2>
+      <ul>
+        <li><strong>Primary</strong>: source text and paragraph selection.</li>
+        <li><strong>Secondary</strong>: editable target text snippet.</li>
+        <li><strong>Diff</strong>: result view for selected range.</li>
+      </ul>
+    </section>
   </main>
 </body>
 </html>`;
@@ -67,6 +132,7 @@ function renderJobPage(jobId, pollFallbackMs) {
           <input id="paragraph-search-input" class="paragraph-search-input form-control" type="text" placeholder="Search primary paragraphs" />
           <button id="paragraph-search-btn" class="btn btn-outline-secondary" type="button">Search</button>
         </div>
+        <a class="btn btn-outline-secondary btn-sm help-btn" href="/help" aria-label="Help" title="Help"></a>
       </div>
     </header>
 
@@ -120,6 +186,10 @@ async function createApp() {
 
   app.get("/", (req, res) => {
     res.send(renderHomePage(manager.getJobList()));
+  });
+
+  app.get("/help", (req, res) => {
+    res.send(renderHelpPage());
   });
 
   app.get("/job/:id", (req, res) => {

@@ -75,6 +75,54 @@ a {
   box-shadow: var(--panel-shadow);
 }
 
+.home-guide {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--panel-shadow);
+  padding: 14px 16px;
+}
+
+.home-guide h2 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-size: 1.1rem;
+}
+
+.home-guide p {
+  margin: 0 0 10px;
+  color: #334155;
+}
+
+.guide-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.guide-card {
+  border: 1px solid #d9e2f0;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.guide-card h3 {
+  margin: 0 0 7px;
+  font-size: 1rem;
+}
+
+.guide-card p,
+.guide-card ul {
+  margin: 0;
+  color: #334155;
+}
+
+.help-link {
+  font-weight: 700;
+}
+
 .status {
   display: inline-block;
   border-radius: 999px;
@@ -313,7 +361,41 @@ button:hover {
 }
 
 .search-row {
-  width: min(100%, 360px);
+  width: min(100%, 460px);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.search-row .input-group {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.help-btn {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.help-btn::before {
+  content: "?";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 0;
+  border: 1px solid #9aa8bf;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .paragraph-search-input {
@@ -480,6 +562,10 @@ button:hover {
 
   .meta-row {
     padding: 8px 9px;
+  }
+
+  .guide-grid {
+    grid-template-columns: 1fr;
   }
 
   .diff-sxs {
