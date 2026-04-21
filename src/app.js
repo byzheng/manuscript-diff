@@ -25,13 +25,20 @@ function renderHomePage(jobs) {
 </head>
 <body>
   <main class="layout">
-    <h1>Manuscript Diff Monitor</h1>
-    <p>Choose a configured job.</p>
-    <ul class="job-list">${listItems}</ul>
+    <section class="home-hero">
+      <h1>Manuscript Diff Monitor</h1>
+      <p class="home-subtitle">Compare a Word manuscript against a revised text snippet quickly, with paragraph-based positioning and a real-time preview of changes for editing review.</p>
+    </section>
+
+    <section class="home-jobs">
+      <h2>Configured Jobs</h2>
+      <p class="muted">Choose a configured job to open the editor workspace.</p>
+      <ul class="job-list">${listItems}</ul>
+    </section>
 
     <section class="home-guide">
       <h2>Quick Start</h2>
-      <p>Edit your manuscript in Word as usual, then copy the revised excerpt into the Secondary tab and open Diff to review the word-level changes.</p>
+      <p>Edit your manuscript in Word as usual, then copy the revised excerpt into the Secondary tab and open Diff for a real-time preview of word-level changes.</p>
 
       <div class="guide-grid">
         <article class="guide-card">
