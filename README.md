@@ -114,6 +114,7 @@ Open:
 - `GET /api/job/:id/status` status JSON
 - `GET /api/job/:id/effective-config` merged/effective config for one job (after shared-default inheritance)
 - `GET /api/effective-config` merged/effective config for all jobs
+- `POST /api/config/reload` force reload `config/config.json` at runtime without restarting Node
 - `GET /api/job/:id/diff` diff JSON (inline + side-by-side HTML)
 - `POST /api/job/:id/refresh` force immediate reconvert + rediff for one job
 - `GET /events` SSE stream for updates

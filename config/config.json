@@ -20,6 +20,13 @@
       "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/122-GPCGMWheatBarley/GP-CGM-Wheat-Barley.docx",
       "secondaryText": "",
       "outputDir": "./data/gpcgm-wheat-barley"
+    },
+    {
+      "id": "gpcgm-canola",
+      "name": "GPCGM Canola",
+      "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/110-CanolaPhenology/CanolaPhenology.docx",
+      "secondaryText": "",
+      "outputDir": "./data/gpcgm-canola"
     }
   ]
 }

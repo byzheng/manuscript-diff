@@ -2,7 +2,6 @@
   "watch": [
     "server.js",
     "src",
-    "config",
     "public"
   ],
   "ext": "js,json,css,html",

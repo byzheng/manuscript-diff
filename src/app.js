@@ -1,7 +1,8 @@
 const express = require("express");
+const fs = require("fs");
 const path = require("path");
 
-const { loadConfig } = require("./config");
+const { CONFIG_PATH, loadConfig } = require("./config");
 const { JobManager } = require("./jobManager");
 
 function renderHomePage(jobs) {
@@ -192,16 +193,92 @@ function renderJobPage(jobId, pollFallbackMs) {
 }
 
 async function createApp() {
-  const config = loadConfig();
   const app = express();
-  const manager = new JobManager(config);
-  await manager.init();
+
+  let runtime = null;
+  let loadedConfigMtimeMs = null;
+  let reloadPromise = null;
+
+  function getConfigMtimeMs() {
+    try {
+      return fs.statSync(CONFIG_PATH).mtimeMs;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function buildRuntime() {
+    const nextConfig = loadConfig();
+    const nextManager = new JobManager(nextConfig);
+    await nextManager.init();
+    return {
+      config: nextConfig,
+      manager: nextManager,
+    };
+  }
+
+  async function reloadRuntimeIfChanged(force = false) {
+    const nextMtimeMs = getConfigMtimeMs();
+    if (!force && (nextMtimeMs === null || loadedConfigMtimeMs === null || nextMtimeMs <= loadedConfigMtimeMs)) {
+      return;
+    }
+
+    if (reloadPromise) {
+      await reloadPromise;
+      return;
+    }
+
+    reloadPromise = (async () => {
+      const previous = runtime;
+      const nextRuntime = await buildRuntime();
+      runtime = nextRuntime;
+      loadedConfigMtimeMs = nextMtimeMs === null ? loadedConfigMtimeMs : nextMtimeMs;
+      if (previous && previous.manager) {
+        await previous.manager.close();
+      }
+      console.log(`[config] reloaded ${CONFIG_PATH}`);
+    })();
+
+    try {
+      await reloadPromise;
+    } finally {
+      reloadPromise = null;
+    }
+  }
+
+  runtime = await buildRuntime();
+  loadedConfigMtimeMs = getConfigMtimeMs();
 
   app.use(express.json({ limit: "10mb" }));
   app.use(express.static(path.resolve(process.cwd(), "public")));
 
+  app.use(async (req, res, next) => {
+    try {
+      await reloadRuntimeIfChanged();
+      next();
+    } catch (error) {
+      console.error(`[config] reload failed: ${error.message}`);
+      next();
+    }
+  });
+
+  app.post("/api/config/reload", async (req, res) => {
+    try {
+      await reloadRuntimeIfChanged(true);
+      res.json({
+        ok: true,
+        reloadedAt: new Date().toISOString(),
+        jobs: runtime.manager.getJobList(),
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: error.message || "Config reload failed",
+      });
+    }
+  });
+
   app.get("/", (req, res) => {
-    res.send(renderHomePage(manager.getJobList()));
+    res.send(renderHomePage(runtime.manager.getJobList()));
   });
 
   app.get("/help", (req, res) => {
@@ -209,16 +286,16 @@ async function createApp() {
   });
 
   app.get("/job/:id", (req, res) => {
-    const job = manager.getJob(req.params.id);
+    const job = runtime.manager.getJob(req.params.id);
     if (!job) {
       res.status(404).send("Unknown job id");
       return;
     }
-    res.send(renderJobPage(req.params.id, config.pollFallbackMs));
+    res.send(renderJobPage(req.params.id, runtime.config.pollFallbackMs));
   });
 
   app.get("/api/job/:id/status", (req, res) => {
-    const job = manager.getJob(req.params.id);
+    const job = runtime.manager.getJob(req.params.id);
     if (!job) {
       res.status(404).json({ error: "Unknown job id" });
       return;
@@ -234,7 +311,7 @@ async function createApp() {
   });
 
   app.get("/api/job/:id/effective-config", (req, res) => {
-    const job = manager.getJob(req.params.id);
+    const job = runtime.manager.getJob(req.params.id);
     if (!job) {
       res.status(404).json({ error: "Unknown job id" });
       return;
@@ -248,8 +325,8 @@ async function createApp() {
   });
 
   app.get("/api/effective-config", (req, res) => {
-    const jobs = manager.getJobList().map((item) => {
-      const job = manager.getJob(item.id);
+    const jobs = runtime.manager.getJobList().map((item) => {
+      const job = runtime.manager.getJob(item.id);
       return {
         id: item.id,
         name: item.name,
@@ -261,7 +338,7 @@ async function createApp() {
   });
 
   app.get("/api/job/:id/diff", (req, res) => {
-    const job = manager.getJob(req.params.id);
+    const job = runtime.manager.getJob(req.params.id);
     if (!job) {
       res.status(404).json({ error: "Unknown job id" });
       return;
@@ -284,7 +361,7 @@ async function createApp() {
   });
 
   app.get("/api/job/:id/editor-state", (req, res) => {
-    const state = manager.getEditorState(req.params.id);
+    const state = runtime.manager.getEditorState(req.params.id);
     if (!state) {
       res.status(404).json({ error: "Unknown job id" });
       return;
@@ -293,90 +370,90 @@ async function createApp() {
   });
 
   app.post("/api/job/:id/start", async (req, res) => {
-    const job = manager.getJob(req.params.id);
+    const job = runtime.manager.getJob(req.params.id);
     if (!job) {
       res.status(404).json({ error: "Unknown job id" });
       return;
     }
 
     try {
-      await manager.setStartParagraph(req.params.id, req.body.startParagraph);
-      res.json({ ok: true, state: manager.getEditorState(req.params.id) });
+      await runtime.manager.setStartParagraph(req.params.id, req.body.startParagraph);
+      res.json({ ok: true, state: runtime.manager.getEditorState(req.params.id) });
     } catch (error) {
       res.status(400).json({ error: error.message || "Failed to set start paragraph" });
     }
   });
 
   app.post("/api/job/:id/secondary", async (req, res) => {
-    const job = manager.getJob(req.params.id);
+    const job = runtime.manager.getJob(req.params.id);
     if (!job) {
       res.status(404).json({ error: "Unknown job id" });
       return;
     }
 
     try {
-      await manager.setSecondaryText(req.params.id, req.body.secondaryText);
-      res.json({ ok: true, state: manager.getEditorState(req.params.id) });
+      await runtime.manager.setSecondaryText(req.params.id, req.body.secondaryText);
+      res.json({ ok: true, state: runtime.manager.getEditorState(req.params.id) });
     } catch (error) {
       res.status(400).json({ error: error.message || "Failed to set secondary text" });
     }
   });
 
   app.post("/api/job/:id/window-extra", async (req, res) => {
-    const job = manager.getJob(req.params.id);
+    const job = runtime.manager.getJob(req.params.id);
     if (!job) {
       res.status(404).json({ error: "Unknown job id" });
       return;
     }
 
     try {
-      await manager.setWindowExtra(req.params.id, req.body.windowExtra);
-      res.json({ ok: true, state: manager.getEditorState(req.params.id) });
+      await runtime.manager.setWindowExtra(req.params.id, req.body.windowExtra);
+      res.json({ ok: true, state: runtime.manager.getEditorState(req.params.id) });
     } catch (error) {
       res.status(400).json({ error: error.message || "Failed to set window extra" });
     }
   });
 
   app.post("/api/job/:id/diff-mode", async (req, res) => {
-    const job = manager.getJob(req.params.id);
+    const job = runtime.manager.getJob(req.params.id);
     if (!job) {
       res.status(404).json({ error: "Unknown job id" });
       return;
     }
 
     try {
-      await manager.setDiffMode(req.params.id, req.body.diffMode);
-      res.json({ ok: true, state: manager.getEditorState(req.params.id) });
+      await runtime.manager.setDiffMode(req.params.id, req.body.diffMode);
+      res.json({ ok: true, state: runtime.manager.getEditorState(req.params.id) });
     } catch (error) {
       res.status(400).json({ error: error.message || "Failed to set diff mode" });
     }
   });
 
   app.post("/api/job/:id/compare", async (req, res) => {
-    const job = manager.getJob(req.params.id);
+    const job = runtime.manager.getJob(req.params.id);
     if (!job) {
       res.status(404).json({ error: "Unknown job id" });
       return;
     }
 
     try {
-      await manager.runCompare(req.params.id, req.body || {});
-      res.json({ ok: true, state: manager.getEditorState(req.params.id) });
+      await runtime.manager.runCompare(req.params.id, req.body || {});
+      res.json({ ok: true, state: runtime.manager.getEditorState(req.params.id) });
     } catch (error) {
       res.status(400).json({ error: error.message || "Failed to compare" });
     }
   });
 
   app.post("/api/job/:id/refresh", async (req, res) => {
-    const job = manager.getJob(req.params.id);
+    const job = runtime.manager.getJob(req.params.id);
     if (!job) {
       res.status(404).json({ error: "Unknown job id" });
       return;
     }
 
     try {
-      await manager.forceRefresh(req.params.id, "api-manual-refresh");
-      const updatedJob = manager.getJob(req.params.id);
+      await runtime.manager.forceRefresh(req.params.id, "api-manual-refresh");
+      const updatedJob = runtime.manager.getJob(req.params.id);
       res.json({
         ok: true,
         id: updatedJob.id,
@@ -400,14 +477,14 @@ async function createApp() {
     };
 
     send({ type: "connected", at: new Date().toISOString() });
-    const unsubscribe = manager.onUpdate(send);
+    const unsubscribe = runtime.manager.onUpdate(send);
 
     req.on("close", () => {
       unsubscribe();
     });
   });
 
-  return { app, config };
+  return { app, config: runtime.config };
 }
 
 module.exports = {

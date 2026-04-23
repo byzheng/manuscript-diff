@@ -451,6 +451,18 @@ class JobManager {
   getJob(jobId) {
     return this.jobs.get(jobId) || null;
   }
+
+  async close() {
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.debounceTimers.clear();
+
+    const closeTasks = this.watchers.map((watcher) => watcher.close());
+    await Promise.allSettled(closeTasks);
+    this.watchers = [];
+    this.listeners.clear();
+  }
 }
 
 module.exports = {
