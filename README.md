@@ -130,6 +130,8 @@ For each job in `outputDir`:
 
 This tool can monitor files outside the project folder (for example `C:/...` or OneDrive locations). That is convenient, but keep these points in mind:
 
+- There is no built-in security check for who can access these files through the web app endpoints.
+- Do not expose this app to external/public web access unless you add your own authentication and access control.
 - The app will read any file path you configure in `config/config.json`; avoid pointing jobs at sensitive folders unrelated to your manuscript.
 - Diff outputs (`primary.txt`, `diff.html`) may contain manuscript content, so keep `outputDir` in a private location.
 - Keep the server local-only (`localhost`) and do not expose it to your local network unless you add authentication.

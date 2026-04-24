@@ -94,6 +94,12 @@ function renderHelpPage() {
     </section>
 
     <section class="home-guide">
+      <h2>Security Warning</h2>
+      <p>This app does not include built-in authentication or access control checks for file access.</p>
+      <p>Keep it local-only and do not expose it to external/public web access. If you need remote access, add your own authentication and authorization layer first.</p>
+    </section>
+
+    <section class="home-guide">
       <h2>Tab Summary</h2>
       <ul>
         <li><strong>Primary</strong>: source text and paragraph selection.</li>
