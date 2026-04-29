@@ -19,7 +19,8 @@
     "chokidar": "^4.0.3",
     "diff": "^7.0.0",
     "express": "^4.21.2",
-    "mammoth": "^1.8.0"
+    "mammoth": "^1.8.0",
+    "pm2": "^6.0.14"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

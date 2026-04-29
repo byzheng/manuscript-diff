@@ -27,6 +27,20 @@
       "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/110-CanolaPhenology/CanolaPhenology.docx",
       "secondaryText": "",
       "outputDir": "./data/gpcgm-canola"
+    },
+    {
+      "id": "zadoks-parameterise",
+      "name": "Zadoks Characterisation NVT",
+      "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/135-ZadoksParameterise/Zadoks Parameterise.docx",
+      "secondaryText": "",
+      "outputDir": "./data/zadoks-parameterise"
+    },
+    {
+      "id": "agronomy-nvt",
+      "name": "Phenology Characterisation NVT",
+      "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/135-ZadoksParameterise/ASAZheng_Bangyou.docx",
+      "secondaryText": "",
+      "outputDir": "./data/agronomy-nvt"
     }
   ]
 }
