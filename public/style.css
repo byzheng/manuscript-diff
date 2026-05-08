@@ -554,18 +554,32 @@ button:hover {
   box-shadow: var(--panel-shadow);
 }
 
+.diff-toolbar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
 .diff-controls {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 0;
+  padding: 10px;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f8ff 100%);
 }
 
 .diff-controls-label {
   margin: 0;
-  color: #334155;
-  font-size: 0.92rem;
+  color: #25324a;
+  font-size: 0.78rem;
   font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .diff-mode-toggle {
@@ -576,9 +590,12 @@ button:hover {
   border-radius: 10px;
   padding: 2px;
   gap: 2px;
+  width: 100%;
+  flex-wrap: wrap;
 }
 
-.diff-mode-btn {
+.diff-mode-btn,
+.compare-direction-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -593,20 +610,24 @@ button:hover {
   cursor: pointer;
   user-select: none;
   transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  flex: 1 1 120px;
 }
 
-.diff-mode-btn:hover {
+.diff-mode-btn:hover,
+.compare-direction-btn:hover {
   background: #dde8f9;
   color: #1e3a8a;
 }
 
-.diff-mode-btn.active {
+.diff-mode-btn.active,
+.compare-direction-btn.active {
   background: var(--menu-accent);
   color: #fff;
   box-shadow: 0 2px 8px rgba(29, 78, 216, 0.25);
 }
 
-.diff-mode-btn:focus-visible {
+.diff-mode-btn:focus-visible,
+.compare-direction-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 0.2rem var(--ring);
 }
@@ -686,6 +707,10 @@ button:hover {
   }
 
   .diff-sxs {
+    grid-template-columns: 1fr;
+  }
+
+  .diff-toolbar {
     grid-template-columns: 1fr;
   }
 }

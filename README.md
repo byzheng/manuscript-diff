@@ -39,7 +39,7 @@ Important fields:
 - `pandocPath`: command or full path to pandoc.
 - `debounceMs`: delay after file-change bursts.
 - `pollFallbackMs`: browser polling interval if SSE is unavailable.
-- `conversionMode`, `compareMode`, `diffMode`, `windowExtra`, `pandocArgs`, `normalise`: optional shared defaults applied to all jobs.
+- `conversionMode`, `compareMode`, `compareDirection`, `diffMode`, `windowExtra`, `pandocArgs`, `normalise`: optional shared defaults applied to all jobs.
 - `jobs`: one or more comparison jobs.
 
 Per job:
@@ -51,6 +51,7 @@ Per job:
 - `outputDir`: where `primary.txt` and `diff.html` are written.
 - `conversionMode`: `mammoth` (recommended for paragraph reliability) or `pandoc`.
 - `compareMode`: `full` (default) or `subset`.
+- `compareDirection`: `secondary-to-primary` (default) or `primary-to-secondary`.
 - `diffMode`: `word` (default), `hybrid` (word diff with character-level detail inside changed words), or `char`.
 - `windowExtra`: extra primary paragraphs to include beyond secondary paragraph count (default `0`).
 - `pandocArgs`: typically `["-t", "plain"]`.
@@ -116,6 +117,7 @@ Open:
 - `GET /api/effective-config` merged/effective config for all jobs
 - `POST /api/config/reload` force reload `config/config.json` at runtime without restarting Node
 - `GET /api/job/:id/diff` diff JSON (inline + side-by-side HTML)
+- `POST /api/job/:id/compare-direction` set comparison direction (`secondary-to-primary` or `primary-to-secondary`)
 - `POST /api/job/:id/refresh` force immediate reconvert + rediff for one job
 - `GET /events` SSE stream for updates
 

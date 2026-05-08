@@ -177,12 +177,22 @@ function renderJobPage(jobId, pollFallbackMs) {
     </section>
 
     <section class="tab-panel" id="panel-compare">
-      <div class="diff-controls">
-        <span class="diff-controls-label">Diff mode</span>
-        <div class="diff-mode-toggle" role="group" aria-label="Diff mode switch">
-          <button type="button" class="diff-mode-btn active" data-diff-mode="word">Word</button>
-          <button type="button" class="diff-mode-btn" data-diff-mode="hybrid">Word + char detail</button>
-          <button type="button" class="diff-mode-btn" data-diff-mode="char">Character</button>
+      <div class="diff-toolbar" aria-label="Diff controls">
+        <div class="diff-controls">
+          <span class="diff-controls-label">Compare direction</span>
+          <div class="diff-mode-toggle" role="group" aria-label="Compare direction switch">
+            <button type="button" class="compare-direction-btn" data-compare-direction="secondary-to-primary">Secondary to Primary</button>
+            <button type="button" class="compare-direction-btn" data-compare-direction="primary-to-secondary">Primary to Secondary</button>
+          </div>
+        </div>
+
+        <div class="diff-controls">
+          <span class="diff-controls-label">Diff mode</span>
+          <div class="diff-mode-toggle" role="group" aria-label="Diff mode switch">
+            <button type="button" class="diff-mode-btn active" data-diff-mode="word">Word</button>
+            <button type="button" class="diff-mode-btn" data-diff-mode="hybrid">Word + char detail</button>
+            <button type="button" class="diff-mode-btn" data-diff-mode="char">Character</button>
+          </div>
         </div>
       </div>
       <div id="diff-wrap" class="diff-inline"></div>
@@ -432,6 +442,21 @@ async function createApp() {
       res.json({ ok: true, state: runtime.manager.getEditorState(req.params.id) });
     } catch (error) {
       res.status(400).json({ error: error.message || "Failed to set diff mode" });
+    }
+  });
+
+  app.post("/api/job/:id/compare-direction", async (req, res) => {
+    const job = runtime.manager.getJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Unknown job id" });
+      return;
+    }
+
+    try {
+      await runtime.manager.setCompareDirection(req.params.id, req.body.compareDirection);
+      res.json({ ok: true, state: runtime.manager.getEditorState(req.params.id) });
+    } catch (error) {
+      res.status(400).json({ error: error.message || "Failed to set compare direction" });
     }
   });
 

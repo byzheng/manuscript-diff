@@ -35,6 +35,8 @@ function loadConfig() {
   const globalConversionMode = config.conversionMode || "mammoth";
   const globalCompareMode = config.compareMode || "full";
   const globalDiffMode = ["word", "hybrid", "char"].includes(config.diffMode) ? config.diffMode : "word";
+  const globalCompareDirection =
+    config.compareDirection === "primary-to-secondary" ? "primary-to-secondary" : "secondary-to-primary";
   const globalWindowExtra = Number.isInteger(config.windowExtra) ? config.windowExtra : 0;
   const globalNormalise = {
     collapseWhitespace: true,
@@ -58,6 +60,10 @@ function loadConfig() {
       conversionMode: job.conversionMode || globalConversionMode,
       compareMode: job.compareMode || globalCompareMode,
       diffMode: ["word", "hybrid", "char"].includes(job.diffMode) ? job.diffMode : globalDiffMode,
+      compareDirection:
+        job.compareDirection === "primary-to-secondary" || job.compareDirection === "secondary-to-primary"
+          ? job.compareDirection
+          : globalCompareDirection,
       windowExtra: Number.isInteger(job.windowExtra) ? job.windowExtra : globalWindowExtra,
       primaryDocx: asAbsolute(job.primaryDocx),
       secondaryText: asAbsolute(secondaryTextValue),

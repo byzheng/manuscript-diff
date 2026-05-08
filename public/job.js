@@ -19,6 +19,7 @@ const paragraphSearchInputEl = document.getElementById("paragraph-search-input")
 const paragraphSearchBtn = document.getElementById("paragraph-search-btn");
 const secondaryInputEl = document.getElementById("secondary-input");
 const secondarySyncStatusEl = document.getElementById("secondary-sync-status");
+const compareDirectionButtonEls = Array.from(document.querySelectorAll(".compare-direction-btn"));
 const diffModeButtonEls = Array.from(document.querySelectorAll(".diff-mode-btn"));
 const diffWrapEl = document.getElementById("diff-wrap");
 
@@ -111,6 +112,14 @@ async function restorePersistedEditorState() {
   if (typeof saved.diffMode === "string" && (!editorState || saved.diffMode !== editorState.diffMode)) {
     try {
       await setDiffMode(saved.diffMode, { openCompareTab: false });
+    } catch (_error) {
+      // Ignore stale values from older versions.
+    }
+  }
+
+  if (typeof saved.compareDirection === "string" && (!editorState || saved.compareDirection !== editorState.compareDirection)) {
+    try {
+      await setCompareDirection(saved.compareDirection, { openCompareTab: false });
     } catch (_error) {
       // Ignore stale values from older versions.
     }
@@ -263,6 +272,13 @@ function renderState(state) {
     });
   }
 
+  if (compareDirectionButtonEls.length > 0) {
+    const compareDirection = state.compareDirection || "secondary-to-primary";
+    compareDirectionButtonEls.forEach((button) => {
+      button.classList.toggle("active", button.dataset.compareDirection === compareDirection);
+    });
+  }
+
   renderParagraphs(state);
   renderDiff(state);
 
@@ -339,6 +355,25 @@ async function setDiffMode(diffMode, options = {}) {
 
   renderState(data.state);
   patchPersistedEditorState({ diffMode: data.state.diffMode || "word" });
+
+  if (openCompareTab) {
+    setActiveTab("compare");
+  }
+}
+
+async function setCompareDirection(compareDirection, options = {}) {
+  const { openCompareTab = false } = options;
+  const next = String(compareDirection || "").toLowerCase();
+  if (!["primary-to-secondary", "secondary-to-primary"].includes(next)) {
+    return;
+  }
+
+  const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/compare-direction`, {
+    compareDirection: next,
+  });
+
+  renderState(data.state);
+  patchPersistedEditorState({ compareDirection: data.state.compareDirection || "secondary-to-primary" });
 
   if (openCompareTab) {
     setActiveTab("compare");
@@ -519,6 +554,12 @@ paragraphSearchInputEl.addEventListener("keydown", (event) => {
 diffModeButtonEls.forEach((button) => {
   button.addEventListener("click", () => {
     setDiffMode(button.dataset.diffMode, { openCompareTab: false }).catch((error) => setError(error.message));
+  });
+});
+
+compareDirectionButtonEls.forEach((button) => {
+  button.addEventListener("click", () => {
+    setCompareDirection(button.dataset.compareDirection, { openCompareTab: false }).catch((error) => setError(error.message));
   });
 });
 

@@ -428,11 +428,14 @@ function buildDiff(primaryText, secondaryText, options) {
   const normaliseOptions = options.normalise || {};
   const compareMode = options.compareMode || "full";
   const diffMode = options.diffMode || "word";
+  const compareDirection = options.compareDirection === "primary-to-secondary" ? "primary-to-secondary" : "secondary-to-primary";
   const normalisedPrimary = applyNormalisation(primaryText, normaliseOptions);
   const normalisedSecondary = applyNormalisation(secondaryText, normaliseOptions);
 
   const { selectedPrimary, alignment } = choosePrimarySegment(normalisedPrimary, normalisedSecondary, compareMode);
-  const parts = buildParts(selectedPrimary, normalisedSecondary, diffMode);
+  const leftText = compareDirection === "secondary-to-primary" ? normalisedSecondary : selectedPrimary;
+  const rightText = compareDirection === "secondary-to-primary" ? selectedPrimary : normalisedSecondary;
+  const parts = buildParts(leftText, rightText, diffMode);
 
   const inlineHtml = renderInlineDiff(parts);
   const sideBySide = renderSideBySide(parts);
@@ -446,6 +449,7 @@ function buildDiff(primaryText, secondaryText, options) {
     secondaryLength: normalisedSecondary.length,
     alignment,
     mode: diffMode,
+    compareDirection,
   };
 }
 

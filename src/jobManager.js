@@ -29,6 +29,8 @@ class JobManager {
         primaryParagraphs: [],
         startParagraph: 0,
         diffMode: ["word", "hybrid", "char"].includes(jobConfig.diffMode) ? jobConfig.diffMode : "word",
+        compareDirection:
+          jobConfig.compareDirection === "primary-to-secondary" ? "primary-to-secondary" : "secondary-to-primary",
         windowExtra: Number.isInteger(jobConfig.windowExtra) ? jobConfig.windowExtra : 0,
         secondaryParagraphCount: 0,
         compareRange: { start: 0, end: -1, count: 0 },
@@ -223,6 +225,7 @@ class JobManager {
       normalise: job.config.normalise || {},
       compareMode: "full",
       diffMode: job.diffMode,
+      compareDirection: job.compareDirection,
     });
 
     return {
@@ -316,6 +319,21 @@ class JobManager {
     await this.compareOnly(jobId, "set-diff-mode");
   }
 
+  async setCompareDirection(jobId, compareDirection) {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error("Unknown job id");
+    }
+
+    const next = String(compareDirection || "").toLowerCase();
+    if (!["primary-to-secondary", "secondary-to-primary"].includes(next)) {
+      throw new Error("Invalid compareDirection");
+    }
+
+    job.compareDirection = next;
+    await this.compareOnly(jobId, "set-compare-direction");
+  }
+
   async runCompare(jobId, payload = {}) {
     const job = this.jobs.get(jobId);
     if (!job) {
@@ -347,6 +365,13 @@ class JobManager {
       }
     }
 
+    if (payload.compareDirection !== undefined) {
+      const next = String(payload.compareDirection || "").toLowerCase();
+      if (["primary-to-secondary", "secondary-to-primary"].includes(next)) {
+        job.compareDirection = next;
+      }
+    }
+
     await this.compareOnly(jobId, "api-compare");
   }
 
@@ -365,6 +390,7 @@ class JobManager {
       updatedAt: job.updatedAt,
       startParagraph: job.startParagraph,
       diffMode: job.diffMode,
+      compareDirection: job.compareDirection,
       windowExtra: job.windowExtra,
       secondaryParagraphCount: job.secondaryParagraphCount,
       compareRange: job.compareRange,

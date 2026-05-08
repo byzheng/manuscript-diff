@@ -5,6 +5,7 @@
   "pollFallbackMs": 2000,
   "conversionMode": "mammoth",
   "compareMode": "subset",
+  "compareDirection": "secondary-to-primary",
   "windowExtra": 0,
   "pandocArgs": ["-t", "plain"],
   "normalise": {
