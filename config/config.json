@@ -15,6 +15,13 @@
   },
   "jobs": [
     {
+      "id": "canola-ofp",
+      "name": "Canola OFP",
+      "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/134-CanolaOFP/CanolaOFP.docx",
+      "secondaryText": "",
+      "outputDir": "./data/canola-ofp"
+    },
+    {
       "id": "gpcgm-wheat-barley",
       "name": "GPCGM Wheat Barley",
       "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/122-GPCGMWheatBarley/GP-CGM-Wheat-Barley.docx",
@@ -34,13 +41,6 @@
       "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/135-ZadoksParameterise/Zadoks Parameterise.docx",
       "secondaryText": "",
       "outputDir": "./data/zadoks-parameterise"
-    },
-    {
-      "id": "agronomy-nvt",
-      "name": "Phenology Characterisation NVT",
-      "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/135-ZadoksParameterise/ASAZheng_Bangyou.docx",
-      "secondaryText": "",
-      "outputDir": "./data/agronomy-nvt"
     }
   ]
 }
