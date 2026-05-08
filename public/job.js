@@ -159,17 +159,26 @@ function centerSelectedParagraphInViewport() {
     return;
   }
 
-  const header = document.querySelector(".top-menu");
-  const headerHeight = header ? header.getBoundingClientRect().height : 0;
+  const primaryPanel = tabPanels.primary;
+  const panelStyle = primaryPanel ? window.getComputedStyle(primaryPanel) : null;
+  const panelScrolls = panelStyle && (panelStyle.overflowY === "auto" || panelStyle.overflowY === "scroll");
 
-  const rect = selected.getBoundingClientRect();
-  const currentTop = window.scrollY || window.pageYOffset;
-  const targetTop = currentTop + rect.top - (window.innerHeight / 2) + (rect.height / 2) - (headerHeight / 2);
-
-  window.scrollTo({
-    top: Math.max(0, targetTop),
-    behavior: "smooth",
-  });
+  if (panelScrolls && primaryPanel) {
+    // Desktop split mode: scroll within the panel's own scrollable box.
+    const panelRect = primaryPanel.getBoundingClientRect();
+    const itemRect = selected.getBoundingClientRect();
+    const offsetInPanel = itemRect.top - panelRect.top + primaryPanel.scrollTop;
+    const targetScroll = offsetInPanel - primaryPanel.clientHeight / 2 + itemRect.height / 2;
+    primaryPanel.scrollTo({ top: Math.max(0, targetScroll), behavior: "smooth" });
+  } else {
+    // Mobile / tab mode: scroll the window.
+    const header = document.querySelector(".top-menu");
+    const headerHeight = header ? header.getBoundingClientRect().height : 0;
+    const rect = selected.getBoundingClientRect();
+    const currentTop = window.scrollY || window.pageYOffset;
+    const targetTop = currentTop + rect.top - (window.innerHeight / 2) + (rect.height / 2) - (headerHeight / 2);
+    window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+  }
 }
 
 function setActiveTab(nextTab) {
@@ -217,9 +226,10 @@ function renderParagraphs(state) {
   paragraphListEl.innerHTML = rows
     .map((paragraph) => {
       const activeClass = paragraph.index === state.startParagraph ? " active" : "";
+      const displayText = paragraph.text.length > 200 ? paragraph.text.slice(0, 200) + "\u2026" : paragraph.text;
       return `<button type="button" class="paragraph-item${activeClass}" data-index="${paragraph.index}">
         <span class="paragraph-index">${paragraph.index + 1}</span>
-        <span class="paragraph-text">${escapeHtml(paragraph.text)}</span>
+        <span class="paragraph-text">${escapeHtml(displayText)}</span>
       </button>`;
     })
     .join("");

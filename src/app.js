@@ -162,41 +162,43 @@ function renderJobPage(jobId, pollFallbackMs) {
       <span id="error" class="error"></span>
     </section>
 
-    <section class="tab-panel active" id="panel-primary">
-      <p class="muted">Click a paragraph to set the comparison starting point.</p>
-      <div id="primary-paragraphs" class="paragraph-list"></div>
-    </section>
+    <div class="workspace-grid">
+      <section class="tab-panel active" id="panel-primary">
+        <p class="muted">Click a paragraph to set the comparison starting point.</p>
+        <div id="primary-paragraphs" class="paragraph-list"></div>
+      </section>
 
-    <section class="tab-panel" id="panel-secondary">
-      <label for="secondary-input">Secondary text</label>
-      <textarea id="secondary-input" class="secondary-input" spellcheck="false"></textarea>
-      <div id="secondary-sync-status" class="sync-status">Synced</div>
-      <div class="controls inline-controls">
-        <button id="apply-secondary-btn" type="button">Apply Secondary Text</button>
-      </div>
-    </section>
+      <section class="tab-panel" id="panel-secondary">
+        <label for="secondary-input">Secondary text</label>
+        <textarea id="secondary-input" class="secondary-input" spellcheck="false"></textarea>
+        <div id="secondary-sync-status" class="sync-status">Synced</div>
+        <div class="controls inline-controls">
+          <button id="apply-secondary-btn" type="button">Apply Secondary Text</button>
+        </div>
+      </section>
 
-    <section class="tab-panel" id="panel-compare">
-      <div class="diff-toolbar" aria-label="Diff controls">
-        <div class="diff-controls">
-          <span class="diff-controls-label">Compare direction</span>
-          <div class="diff-mode-toggle" role="group" aria-label="Compare direction switch">
-            <button type="button" class="compare-direction-btn" data-compare-direction="secondary-to-primary">Secondary to Primary</button>
-            <button type="button" class="compare-direction-btn" data-compare-direction="primary-to-secondary">Primary to Secondary</button>
+      <section class="tab-panel" id="panel-compare">
+        <div class="diff-toolbar" aria-label="Diff controls">
+          <div class="diff-controls">
+            <span class="diff-controls-label">Compare direction</span>
+            <div class="diff-mode-toggle" role="group" aria-label="Compare direction switch">
+              <button type="button" class="compare-direction-btn" data-compare-direction="secondary-to-primary">Secondary to Primary</button>
+              <button type="button" class="compare-direction-btn" data-compare-direction="primary-to-secondary">Primary to Secondary</button>
+            </div>
+          </div>
+
+          <div class="diff-controls">
+            <span class="diff-controls-label">Diff mode</span>
+            <div class="diff-mode-toggle" role="group" aria-label="Diff mode switch">
+              <button type="button" class="diff-mode-btn active" data-diff-mode="word">Word</button>
+              <button type="button" class="diff-mode-btn" data-diff-mode="hybrid">Word + char detail</button>
+              <button type="button" class="diff-mode-btn" data-diff-mode="char">Character</button>
+            </div>
           </div>
         </div>
-
-        <div class="diff-controls">
-          <span class="diff-controls-label">Diff mode</span>
-          <div class="diff-mode-toggle" role="group" aria-label="Diff mode switch">
-            <button type="button" class="diff-mode-btn active" data-diff-mode="word">Word</button>
-            <button type="button" class="diff-mode-btn" data-diff-mode="hybrid">Word + char detail</button>
-            <button type="button" class="diff-mode-btn" data-diff-mode="char">Character</button>
-          </div>
-        </div>
-      </div>
-      <div id="diff-wrap" class="diff-inline"></div>
-    </section>
+        <div id="diff-wrap" class="diff-inline"></div>
+      </section>
+    </div>
   </main>
 
   <script>

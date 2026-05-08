@@ -714,3 +714,80 @@ button:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Desktop layout (≥ 900px): top-row = primary | secondary, bottom = diff ── */
+@media (min-width: 900px) {
+  /* Hide tab buttons — all panels always visible */
+  .tab-segment {
+    display: none;
+  }
+
+  /* 3-area grid:
+       [primary] [secondary]
+       [compare] [compare]
+     Top row is ~46vh, bottom row is ~46vh  */
+  .workspace-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    grid-template-rows: 46vh 46vh;
+    grid-template-areas:
+      "primary secondary"
+      "compare compare";
+    gap: 12px;
+  }
+
+  /* All panels always visible */
+  .workspace-grid .tab-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Primary: compact scrollable paragraph list ── */
+  #panel-primary {
+    grid-area: primary;
+    overflow-y: auto;
+  }
+
+  /* Compact single-line paragraph rows */
+  .workspace-grid .paragraph-list {
+    gap: 3px;
+  }
+
+  .workspace-grid .paragraph-item {
+    padding: 5px 8px;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .workspace-grid .paragraph-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.88rem;
+    line-height: 1.35;
+  }
+
+  .workspace-grid .paragraph-index {
+    font-size: 0.78rem;
+    min-width: 32px;
+  }
+
+  /* ── Secondary: textarea fills the panel height ── */
+  #panel-secondary {
+    grid-area: secondary;
+  }
+
+  .workspace-grid #panel-secondary .secondary-input {
+    flex: 1;
+    height: 0;       /* flex will expand it */
+    min-height: 60px;
+    resize: none;
+  }
+
+  /* ── Diff: full-width bottom strip ── */
+  #panel-compare {
+    grid-area: compare;
+    overflow-y: auto;
+  }
+}
