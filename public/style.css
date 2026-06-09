@@ -556,9 +556,19 @@ button:hover {
 
 .diff-toolbar {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 12px;
+}
+
+#panel-compare {
+  --compare-box-width: 100%;
+}
+
+#panel-compare > #diff-wrap {
+  width: min(100%, var(--compare-box-width));
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .diff-controls {
@@ -592,6 +602,29 @@ button:hover {
   gap: 2px;
   width: 100%;
   flex-wrap: wrap;
+}
+
+.compare-width-controls {
+  min-width: 0;
+}
+
+.compare-width-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+#compare-width-input {
+  width: 100%;
+}
+
+.compare-width-value {
+  min-width: 48px;
+  text-align: right;
+  font-weight: 700;
+  color: #25324a;
 }
 
 .diff-mode-btn,
@@ -712,6 +745,10 @@ button:hover {
 
   .diff-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  #panel-compare > #diff-wrap {
+    width: 100%;
   }
 }
 

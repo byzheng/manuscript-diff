@@ -195,6 +195,14 @@ function renderJobPage(jobId, pollFallbackMs) {
               <button type="button" class="diff-mode-btn" data-diff-mode="char">Character</button>
             </div>
           </div>
+
+          <div class="diff-controls compare-width-controls">
+            <span class="diff-controls-label">Compare box width</span>
+            <div class="compare-width-row">
+              <input id="compare-width-input" type="range" min="55" max="100" step="1" value="100" aria-label="Compare box width" />
+              <span id="compare-width-value" class="compare-width-value">100%</span>
+            </div>
+          </div>
         </div>
         <div id="diff-wrap" class="diff-inline"></div>
       </section>

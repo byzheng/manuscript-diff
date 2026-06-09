@@ -22,6 +22,9 @@ const secondarySyncStatusEl = document.getElementById("secondary-sync-status");
 const compareDirectionButtonEls = Array.from(document.querySelectorAll(".compare-direction-btn"));
 const diffModeButtonEls = Array.from(document.querySelectorAll(".diff-mode-btn"));
 const diffWrapEl = document.getElementById("diff-wrap");
+const panelCompareEl = document.getElementById("panel-compare");
+const compareWidthInputEl = document.getElementById("compare-width-input");
+const compareWidthValueEl = document.getElementById("compare-width-value");
 
 const tabButtons = Array.from(document.querySelectorAll(".tab-btn"));
 const tabPanels = {
@@ -37,6 +40,42 @@ let lastSearchIndex = -1;
 let secondaryAutoTimer = null;
 const editorStorageKey = `manuscript-diff:${jobId}:editor`;
 const secondaryMinHeightPx = 280;
+const compareBoxWidthDefaultPct = 100;
+const compareBoxWidthMinPct = 55;
+const compareBoxWidthMaxPct = 100;
+
+function normalizeCompareBoxWidth(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return compareBoxWidthDefaultPct;
+  }
+
+  const rounded = Math.round(numeric);
+  return Math.min(compareBoxWidthMaxPct, Math.max(compareBoxWidthMinPct, rounded));
+}
+
+function applyCompareBoxWidth(widthPct, options = {}) {
+  const { persist = true } = options;
+  const normalizedWidthPct = normalizeCompareBoxWidth(widthPct);
+  const isNarrowViewport = window.innerWidth < 900;
+  const effectiveWidthPct = isNarrowViewport ? 100 : normalizedWidthPct;
+
+  if (panelCompareEl) {
+    panelCompareEl.style.setProperty("--compare-box-width", `${effectiveWidthPct}%`);
+  }
+
+  if (compareWidthInputEl && document.activeElement !== compareWidthInputEl) {
+    compareWidthInputEl.value = String(normalizedWidthPct);
+  }
+
+  if (compareWidthValueEl) {
+    compareWidthValueEl.textContent = `${normalizedWidthPct}%`;
+  }
+
+  if (persist) {
+    patchPersistedEditorState({ compareBoxWidth: normalizedWidthPct });
+  }
+}
 
 function resizeSecondaryInputToViewport() {
   if (activeTab !== "secondary") {
@@ -90,6 +129,8 @@ function patchPersistedEditorState(patch) {
 
 async function restorePersistedEditorState() {
   const saved = loadPersistedEditorState();
+
+  applyCompareBoxWidth(saved.compareBoxWidth, { persist: false });
 
   if (Number.isInteger(saved.startParagraph) && (!editorState || saved.startParagraph !== editorState.startParagraph)) {
     try {
@@ -581,9 +622,17 @@ tabButtons.forEach((button) => {
 
 window.addEventListener("resize", () => {
   resizeSecondaryInputToViewport();
+  applyCompareBoxWidth(compareWidthInputEl ? compareWidthInputEl.value : compareBoxWidthDefaultPct, { persist: false });
 });
 
+if (compareWidthInputEl) {
+  compareWidthInputEl.addEventListener("input", () => {
+    applyCompareBoxWidth(compareWidthInputEl.value);
+  });
+}
+
 async function initPage() {
+  applyCompareBoxWidth(compareBoxWidthDefaultPct, { persist: false });
   setActiveTab("primary");
   await fetchEditorState();
   await restorePersistedEditorState();
