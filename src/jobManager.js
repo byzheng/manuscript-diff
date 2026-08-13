@@ -3,12 +3,13 @@ const path = require("path");
 const chokidar = require("chokidar");
 const sanitizeHtml = require("sanitize-html");
 
-const { convertDocxToText, runMammothHtml, withTempCopyOnPermission } = require("./pandoc");
+const { convertDocxToText, convertDocxToHtmlPreview, runMammothHtml, withTempCopyOnPermission } = require("./pandoc");
 const { buildDiff, normaliseText, splitParagraphs } = require("./textUtils");
 
 function sanitisePrimaryPreviewHtml(inputHtml) {
   return sanitizeHtml(String(inputHtml || ""), {
     allowedTags: [
+      "div",
       "p",
       "br",
       "strong",
@@ -37,14 +38,61 @@ function sanitisePrimaryPreviewHtml(inputHtml) {
       "hr",
       "span",
       "a",
+      "figure",
+      "figcaption",
+      "pre",
+      "code",
+      "img",
+      "canvas",
     ],
     allowedAttributes: {
-      "*": ["colspan", "rowspan"],
+      "*": ["colspan", "rowspan", "width", "height", "class"],
       a: ["href", "title"],
+      img: ["src", "alt", "title", "width", "height"],
+      canvas: ["width", "height"],
     },
     allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesByTag: {
+      img: ["http", "https", "data"],
+    },
     disallowedTagsMode: "discard",
   });
+}
+
+function scorePreviewHtml(previewHtml) {
+  const html = String(previewHtml || "").toLowerCase();
+  if (!html.trim()) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const scoreMatches = (pattern, weight) => ((html.match(pattern) || []).length || 0) * weight;
+
+  let score = 0;
+  score += scoreMatches(/<img\b/g, 6);
+  score += scoreMatches(/<figure\b/g, 4);
+  score += scoreMatches(/<svg\b/g, 4);
+  score += scoreMatches(/<table\b/g, 2);
+  score += scoreMatches(/<figcaption\b/g, 1);
+
+  score -= scoreMatches(/\[(drawing|shape|textbox|diagram|canvas)[^\]]*\]/g, 4);
+  score -= scoreMatches(/drawingml|v:shape|canvas text|textbox:/g, 3);
+
+  return score;
+}
+
+function pickBestPreviewHtml(candidates) {
+  let bestHtml = "";
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const html of candidates) {
+    const score = scorePreviewHtml(html);
+    if (score > bestScore) {
+      bestScore = score;
+      bestHtml = html;
+    }
+  }
+
+  return bestHtml;
 }
 
 class JobManager {
@@ -198,10 +246,29 @@ class JobManager {
       });
 
       try {
-        const rawPreviewHtml = await withTempCopyOnPermission(config.primaryDocx, (candidatePath) =>
-          runMammothHtml(candidatePath)
-        );
-        primaryPreviewHtml = sanitisePrimaryPreviewHtml(rawPreviewHtml);
+        let mammothPreviewHtml = "";
+        let pandocPreviewHtml = "";
+
+        try {
+          const rawMammothPreviewHtml = await withTempCopyOnPermission(config.primaryDocx, (candidatePath) =>
+            runMammothHtml(candidatePath)
+          );
+          mammothPreviewHtml = sanitisePrimaryPreviewHtml(rawMammothPreviewHtml);
+        } catch (_mammothPreviewError) {
+          mammothPreviewHtml = "";
+        }
+
+        try {
+          const rawPandocPreviewHtml = await convertDocxToHtmlPreview({
+            pandocPath: this.config.pandocPath,
+            inputPath: config.primaryDocx,
+          });
+          pandocPreviewHtml = sanitisePrimaryPreviewHtml(rawPandocPreviewHtml);
+        } catch (_pandocPreviewError) {
+          pandocPreviewHtml = "";
+        }
+
+        primaryPreviewHtml = pickBestPreviewHtml([mammothPreviewHtml, pandocPreviewHtml]);
       } catch (_previewError) {
         primaryPreviewHtml = "";
       }

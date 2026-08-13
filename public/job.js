@@ -332,6 +332,37 @@ function renderPrimaryPreview(state) {
   }
 
   primaryPreviewEl.innerHTML = html;
+  rasterizePreviewCanvases();
+}
+
+function rasterizePreviewCanvases() {
+  if (!primaryPreviewEl) {
+    return;
+  }
+
+  const canvases = Array.from(primaryPreviewEl.querySelectorAll("canvas"));
+  canvases.forEach((canvas, index) => {
+    try {
+      const dataUrl = canvas.toDataURL("image/png");
+      const image = document.createElement("img");
+      image.src = dataUrl;
+      image.alt = canvas.getAttribute("aria-label") || `Diagram ${index + 1}`;
+      image.className = "primary-preview-rasterized";
+
+      const width = Number(canvas.getAttribute("width"));
+      const height = Number(canvas.getAttribute("height"));
+      if (Number.isFinite(width) && width > 0) {
+        image.width = width;
+      }
+      if (Number.isFinite(height) && height > 0) {
+        image.height = height;
+      }
+
+      canvas.replaceWith(image);
+    } catch (_error) {
+      // Keep original canvas if conversion fails.
+    }
+  });
 }
 
 function renderState(state) {

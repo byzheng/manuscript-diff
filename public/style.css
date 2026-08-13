@@ -592,6 +592,17 @@ button:hover {
   font-weight: 700;
 }
 
+.primary-preview img,
+.primary-preview .primary-preview-rasterized {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.5rem 0 0.9rem;
+  border: 1px solid #d5dfed;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
 .secondary-input {
   width: 100%;
   min-height: 280px;
