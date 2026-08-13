@@ -41,6 +41,8 @@ let lastSearchTerm = "";
 let lastSearchIndex = -1;
 let secondaryAutoTimer = null;
 let activePrimaryView = "paragraphs";
+let activePreviewAnchorEl = null;
+let suppressSseUntilMs = 0;
 const editorStorageKey = `manuscript-diff:${jobId}:editor`;
 const secondaryMinHeightPx = 280;
 const compareBoxWidthDefaultPct = 100;
@@ -217,6 +219,152 @@ function setError(message) {
   errorEl.textContent = message ? `Error: ${escapeHtml(message)}` : "";
 }
 
+function suppressImmediateSseRerender(durationMs = 1000) {
+  suppressSseUntilMs = Date.now() + Math.max(0, Number(durationMs) || 0);
+}
+
+function isSseSuppressed() {
+  return Date.now() < suppressSseUntilMs;
+}
+
+function capturePrimaryViewport() {
+  const primaryPanel = tabPanels.primary;
+  if (!primaryPanel) {
+    return null;
+  }
+
+  return {
+    panelScrollTop: primaryPanel.scrollTop,
+    windowScrollTop: window.scrollY || window.pageYOffset || 0,
+    previewScrollTop: primaryPreviewEl ? primaryPreviewEl.scrollTop : 0,
+  };
+}
+
+function restorePrimaryViewport(snapshot) {
+  if (!snapshot) {
+    return;
+  }
+
+  const primaryPanel = tabPanels.primary;
+  if (primaryPanel) {
+    primaryPanel.scrollTop = snapshot.panelScrollTop;
+  }
+
+  if (primaryPreviewEl) {
+    primaryPreviewEl.scrollTop = snapshot.previewScrollTop;
+  }
+
+  const panelStyle = primaryPanel ? window.getComputedStyle(primaryPanel) : null;
+  const panelScrolls = panelStyle && (panelStyle.overflowY === "auto" || panelStyle.overflowY === "scroll");
+  if (!panelScrolls && activeTab === "primary") {
+    window.scrollTo({ top: snapshot.windowScrollTop, behavior: "auto" });
+  }
+}
+
+function normalizePreviewText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenisePreviewText(text) {
+  return normalizePreviewText(text)
+    .split(" ")
+    .filter((token) => token.length > 2);
+}
+
+function findBestParagraphIndexFromPreviewText(previewText) {
+  if (!editorState || !Array.isArray(editorState.paragraphs) || editorState.paragraphs.length === 0) {
+    return -1;
+  }
+
+  const snippet = normalizePreviewText(previewText);
+  if (!snippet) {
+    return -1;
+  }
+
+  const paragraphs = editorState.paragraphs;
+  if (snippet.length >= 24) {
+    for (let i = 0; i < paragraphs.length; i += 1) {
+      const paragraphText = normalizePreviewText(paragraphs[i].text || "");
+      if (paragraphText.includes(snippet) || snippet.includes(paragraphText)) {
+        return i;
+      }
+    }
+  }
+
+  const tokens = tokenisePreviewText(snippet).slice(0, 16);
+  if (tokens.length === 0) {
+    return -1;
+  }
+
+  let best = { index: -1, score: 0 };
+  for (let i = 0; i < paragraphs.length; i += 1) {
+    const paragraphText = normalizePreviewText(paragraphs[i].text || "");
+    if (!paragraphText) {
+      continue;
+    }
+
+    let overlap = 0;
+    for (const token of tokens) {
+      if (paragraphText.includes(token)) {
+        overlap += 1;
+      }
+    }
+
+    const score = overlap / tokens.length;
+    if (score > best.score) {
+      best = { index: i, score };
+    }
+  }
+
+  return best.score >= 0.34 ? best.index : -1;
+}
+
+function markActivePreviewAnchor(anchor) {
+  if (activePreviewAnchorEl && activePreviewAnchorEl !== anchor) {
+    activePreviewAnchorEl.classList.remove("active");
+  }
+
+  activePreviewAnchorEl = anchor || null;
+  if (activePreviewAnchorEl) {
+    activePreviewAnchorEl.classList.add("active");
+  }
+}
+
+function getPreviewAnchorFromTarget(target) {
+  if (!primaryPreviewEl || !target) {
+    return null;
+  }
+
+  const anchor = target.closest(".preview-anchor");
+  if (!anchor || !primaryPreviewEl.contains(anchor)) {
+    return null;
+  }
+
+  return anchor;
+}
+
+function navigateFromPreviewAnchor(anchor, options = {}) {
+  if (!anchor) {
+    return;
+  }
+
+  const previewText = anchor.innerText || anchor.textContent || "";
+  const index = findBestParagraphIndexFromPreviewText(previewText);
+  if (!Number.isInteger(index) || index < 0) {
+    setError("Unable to map this preview paragraph to a primary paragraph.");
+    return;
+  }
+
+  setError("");
+  markActivePreviewAnchor(anchor);
+  setStartParagraph(index, options).catch((error) => setError(error.message));
+}
+
 function centerSelectedParagraphInViewport() {
   if (!editorState || !Number.isInteger(editorState.startParagraph)) {
     return;
@@ -289,8 +437,31 @@ function setActiveTab(nextTab) {
   }
 }
 
-function renderParagraphs(state) {
+function renderParagraphs(state, options = {}) {
+  const { preferReuse = false } = options;
   const rows = state.paragraphs || [];
+
+  if (preferReuse && paragraphListEl) {
+    const existingButtons = Array.from(paragraphListEl.querySelectorAll(".paragraph-item"));
+    if (existingButtons.length === rows.length) {
+      let reusable = true;
+      for (let i = 0; i < existingButtons.length; i += 1) {
+        if (Number(existingButtons[i].dataset.index) !== rows[i].index) {
+          reusable = false;
+          break;
+        }
+      }
+
+      if (reusable) {
+        existingButtons.forEach((button) => {
+          const index = Number(button.dataset.index);
+          button.classList.toggle("active", index === state.startParagraph);
+        });
+        return;
+      }
+    }
+  }
+
   paragraphListEl.innerHTML = rows
     .map((paragraph) => {
       const activeClass = paragraph.index === state.startParagraph ? " active" : "";
@@ -333,6 +504,30 @@ function renderPrimaryPreview(state) {
 
   primaryPreviewEl.innerHTML = html;
   rasterizePreviewCanvases();
+  attachPreviewParagraphAnchors();
+}
+
+function attachPreviewParagraphAnchors() {
+  if (!primaryPreviewEl) {
+    return;
+  }
+
+  markActivePreviewAnchor(null);
+
+  const candidates = primaryPreviewEl.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li, blockquote");
+  candidates.forEach((node) => {
+    if (node.closest("table") || node.closest("figure")) {
+      return;
+    }
+
+    const text = String(node.textContent || "").trim();
+    if (text.length < 8) {
+      return;
+    }
+
+    node.classList.add("preview-anchor");
+    node.title = "Click to set start paragraph. Double-click to open Diff.";
+  });
 }
 
 function rasterizePreviewCanvases() {
@@ -365,7 +560,8 @@ function rasterizePreviewCanvases() {
   });
 }
 
-function renderState(state) {
+function renderState(state, options = {}) {
+  const { preferParagraphReuse = false, skipPreviewRender = false } = options;
   editorState = state;
   document.getElementById("job-title").textContent = state.name || jobId;
   setStatus(state.status);
@@ -402,8 +598,10 @@ function renderState(state) {
     });
   }
 
-  renderParagraphs(state);
-  renderPrimaryPreview(state);
+  renderParagraphs(state, { preferReuse: preferParagraphReuse });
+  if (!skipPreviewRender) {
+    renderPrimaryPreview(state);
+  }
   renderDiff(state);
 
   if (activeTab === "secondary") {
@@ -455,11 +653,29 @@ async function forceRefresh() {
 
 async function setStartParagraph(index, options = {}) {
   const { openCompareTab = true } = options;
+  const shouldPreserveViewport = !openCompareTab && activeTab === "primary";
+  const viewportSnapshot = shouldPreserveViewport ? capturePrimaryViewport() : null;
+
+  if (shouldPreserveViewport) {
+    suppressImmediateSseRerender(1200);
+  }
+
   const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/start`, {
     startParagraph: index,
   });
 
-  renderState(data.state);
+  renderState(data.state, {
+    preferParagraphReuse: shouldPreserveViewport,
+    skipPreviewRender: shouldPreserveViewport && activePrimaryView === "styled",
+  });
+
+  if (shouldPreserveViewport) {
+    // Wait one frame so refreshed DOM measurements/scroll boxes are applied.
+    window.requestAnimationFrame(() => {
+      restorePrimaryViewport(viewportSnapshot);
+    });
+  }
+
   patchPersistedEditorState({ startParagraph: data.state.startParagraph });
   if (openCompareTab) {
     setActiveTab("compare");
@@ -621,6 +837,10 @@ function setupSse() {
         return;
       }
 
+      if (isSseSuppressed() && activeTab === "primary") {
+        return;
+      }
+
       fetchEditorState().catch((error) => setError(error.message));
     } catch (error) {
       setError(error.message);
@@ -698,6 +918,18 @@ primaryViewButtonEls.forEach((button) => {
     setPrimaryView(button.dataset.primaryView);
   });
 });
+
+if (primaryPreviewEl) {
+  primaryPreviewEl.addEventListener("click", (event) => {
+    const anchor = getPreviewAnchorFromTarget(event.target);
+    navigateFromPreviewAnchor(anchor, { openCompareTab: false });
+  });
+
+  primaryPreviewEl.addEventListener("dblclick", (event) => {
+    const anchor = getPreviewAnchorFromTarget(event.target);
+    navigateFromPreviewAnchor(anchor, { openCompareTab: true });
+  });
+}
 
 window.addEventListener("resize", () => {
   resizeSecondaryInputToViewport();

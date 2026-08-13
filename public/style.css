@@ -603,6 +603,21 @@ button:hover {
   background: #ffffff;
 }
 
+.primary-preview .preview-anchor {
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.primary-preview .preview-anchor:hover {
+  background: #eef4ff;
+}
+
+.primary-preview .preview-anchor.active {
+  background: #e2edff;
+  box-shadow: 0 0 0 1px #7ea5e5 inset;
+}
+
 .secondary-input {
   width: 100%;
   min-height: 280px;
