@@ -39,6 +39,7 @@ let secondaryAutoTimer = null;
 let activePreviewAnchorEl = null;
 let suppressSseUntilMs = 0;
 let lastRenderedPrimaryPreviewHtml = null;
+let primaryScrollPersistTimer = null;
 const editorStorageKey = `manuscript-diff:${jobId}:editor`;
 const secondaryMinHeightPx = 280;
 const compareBoxWidthDefaultPct = 100;
@@ -128,8 +129,49 @@ function patchPersistedEditorState(patch) {
   }
 }
 
+function persistPrimaryViewportPosition() {
+  const primaryPanel = tabPanels.primary;
+  patchPersistedEditorState({
+    primaryPreviewScrollTop: primaryPreviewEl ? primaryPreviewEl.scrollTop : 0,
+    primaryPanelScrollTop: primaryPanel ? primaryPanel.scrollTop : 0,
+    primaryWindowScrollY: window.scrollY || window.pageYOffset || 0,
+  });
+}
+
+function schedulePersistPrimaryViewportPosition() {
+  if (primaryScrollPersistTimer) {
+    window.clearTimeout(primaryScrollPersistTimer);
+  }
+
+  primaryScrollPersistTimer = window.setTimeout(() => {
+    primaryScrollPersistTimer = null;
+    persistPrimaryViewportPosition();
+  }, 120);
+}
+
+function restorePrimaryViewportPosition(saved) {
+  const primaryPanel = tabPanels.primary;
+
+  if (primaryPreviewEl && Number.isFinite(Number(saved.primaryPreviewScrollTop))) {
+    primaryPreviewEl.scrollTop = Number(saved.primaryPreviewScrollTop);
+  }
+
+  if (primaryPanel && Number.isFinite(Number(saved.primaryPanelScrollTop))) {
+    primaryPanel.scrollTop = Number(saved.primaryPanelScrollTop);
+  }
+
+  if (Number.isFinite(Number(saved.primaryWindowScrollY))) {
+    const panelStyle = primaryPanel ? window.getComputedStyle(primaryPanel) : null;
+    const panelScrolls = panelStyle && (panelStyle.overflowY === "auto" || panelStyle.overflowY === "scroll");
+    if (!panelScrolls && activeTab === "primary") {
+      window.scrollTo({ top: Number(saved.primaryWindowScrollY), behavior: "auto" });
+    }
+  }
+}
+
 async function restorePersistedEditorState() {
   const saved = loadPersistedEditorState();
+  let restoredViewport = false;
 
   applyCompareBoxWidth(saved.compareBoxWidth, { persist: false });
 
@@ -166,6 +208,22 @@ async function restorePersistedEditorState() {
       // Ignore stale values from older versions.
     }
   }
+
+  if (
+    saved &&
+    (saved.primaryPreviewScrollTop !== undefined ||
+      saved.primaryPanelScrollTop !== undefined ||
+      saved.primaryWindowScrollY !== undefined)
+  ) {
+    window.setTimeout(() => {
+      restorePrimaryViewportPosition(saved);
+    }, 0);
+    restoredViewport = true;
+  }
+
+  return {
+    restoredViewport,
+  };
 }
 
 function setSecondarySyncStatus(text, type) {
@@ -305,6 +363,22 @@ function markActivePreviewAnchor(anchor) {
   if (activePreviewAnchorEl) {
     activePreviewAnchorEl.classList.add("active");
   }
+}
+
+function syncActivePreviewAnchorWithState() {
+  if (!primaryPreviewEl || !editorState || !Number.isInteger(editorState.startParagraph)) {
+    markActivePreviewAnchor(null);
+    return;
+  }
+
+  const selector = `.preview-anchor[data-paragraph-index="${editorState.startParagraph}"]`;
+  const mappedAnchor = primaryPreviewEl.querySelector(selector);
+  if (mappedAnchor) {
+    markActivePreviewAnchor(mappedAnchor);
+    return;
+  }
+
+  markActivePreviewAnchor(null);
 }
 
 function getPreviewAnchorFromTarget(target) {
@@ -511,6 +585,8 @@ function attachPreviewParagraphAnchors() {
     node.classList.add("preview-anchor");
     node.title = "Click to set start paragraph. Double-click to open Diff.";
   });
+
+  syncActivePreviewAnchorWithState();
 }
 
 function rasterizePreviewCanvases() {
@@ -583,6 +659,8 @@ function renderState(state, options = {}) {
 
   if (!skipPreviewRender) {
     renderPrimaryPreview(state);
+  } else {
+    syncActivePreviewAnchorWithState();
   }
   renderDiff(state);
 
@@ -663,6 +741,7 @@ async function setStartParagraph(index, options = {}) {
   }
 
   patchPersistedEditorState({ startParagraph: data.state.startParagraph });
+  persistPrimaryViewportPosition();
   if (openCompareTab) {
     setActiveTab("compare");
   }
@@ -865,7 +944,17 @@ if (primaryPreviewEl) {
     const anchor = getPreviewAnchorFromTarget(event.target);
     navigateFromPreviewAnchor(anchor, { openCompareTab: true });
   });
+
+  primaryPreviewEl.addEventListener("scroll", () => {
+    schedulePersistPrimaryViewportPosition();
+  });
 }
+
+window.addEventListener("scroll", () => {
+  if (activeTab === "primary") {
+    schedulePersistPrimaryViewportPosition();
+  }
+});
 
 window.addEventListener("resize", () => {
   resizeSecondaryInputToViewport();
@@ -882,10 +971,12 @@ async function initPage() {
   applyCompareBoxWidth(compareBoxWidthDefaultPct, { persist: false });
   setActiveTab("primary");
   await fetchEditorState({ force: true });
-  await restorePersistedEditorState();
-  window.setTimeout(() => {
-    centerSelectedParagraphInViewport();
-  }, 0);
+  const restoreResult = await restorePersistedEditorState();
+  if (!restoreResult || !restoreResult.restoredViewport) {
+    window.setTimeout(() => {
+      centerSelectedParagraphInViewport();
+    }, 0);
+  }
 
   if (!setupSse()) {
     window.setInterval(() => {
