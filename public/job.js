@@ -662,14 +662,19 @@ function renderState(state, options = {}) {
   }
 }
 
-async function fetchEditorState() {
+async function fetchEditorState(options = {}) {
+  const { force = false, renderOptions = {} } = options;
+  if (!force && isSseSuppressed()) {
+    return;
+  }
+
   const response = await fetch(`/api/job/${encodeURIComponent(jobId)}/editor-state`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load editor state: ${response.status}`);
   }
 
   const state = await response.json();
-  renderState(state);
+  renderState(state, renderOptions);
 }
 
 async function postJson(url, payload) {
@@ -695,7 +700,7 @@ async function forceRefresh() {
 
   try {
     await postJson(`/api/job/${encodeURIComponent(jobId)}/refresh`, {});
-    await fetchEditorState();
+    await fetchEditorState({ force: true });
   } finally {
     refreshBtn.disabled = false;
     refreshBtn.textContent = original;
@@ -812,6 +817,8 @@ function findNextParagraphByKeyword() {
 async function applySecondaryText(options = {}) {
   const { openCompareTab = true, silent = false } = options;
 
+  suppressImmediateSseRerender(2000);
+
   if (editorState && secondaryInputEl.value === (editorState.secondaryText || "")) {
     setSecondarySyncStatus("Synced", "ok");
     return;
@@ -830,7 +837,10 @@ async function applySecondaryText(options = {}) {
     const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/secondary`, {
       secondaryText: secondaryInputEl.value,
     });
-    renderState(data.state);
+    renderState(data.state, {
+      preferParagraphReuse: true,
+      skipPreviewRender: true,
+    });
     patchPersistedEditorState({ secondaryText: data.state.secondaryText || "" });
     setSecondarySyncStatus("Synced", "ok");
     if (openCompareTab) {
@@ -888,7 +898,7 @@ function setupSse() {
         return;
       }
 
-      if (isSseSuppressed() && activeTab === "primary") {
+      if (isSseSuppressed()) {
         return;
       }
 
@@ -919,6 +929,7 @@ applySecondaryBtn.addEventListener("click", () => {
 });
 
 secondaryInputEl.addEventListener("input", () => {
+  suppressImmediateSseRerender(2500);
   patchPersistedEditorState({ secondaryText: secondaryInputEl.value });
   setSecondarySyncStatus("Pending changes...", "pending");
   scheduleSecondaryAutoApply();
@@ -997,7 +1008,7 @@ async function initPage() {
   applyCompareBoxWidth(compareBoxWidthDefaultPct, { persist: false });
   setPrimaryView("paragraphs", { persist: false });
   setActiveTab("primary");
-  await fetchEditorState();
+  await fetchEditorState({ force: true });
   await restorePersistedEditorState();
   window.setTimeout(() => {
     centerSelectedParagraphInViewport();
