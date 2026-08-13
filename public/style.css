@@ -613,6 +613,35 @@ button:hover {
   box-shadow: 0 0 0 1px #7ea5e5 inset;
 }
 
+.primary-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.primary-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.primary-search-count {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+mark.primary-search-match {
+  background: #ffe8a3;
+  color: inherit;
+  border-radius: 2px;
+}
+
+mark.primary-search-match.active {
+  background: #ff9f1c;
+  box-shadow: 0 0 0 1px #c2760a;
+}
+
 .secondary-input {
   width: 100%;
   min-height: 280px;

@@ -15,6 +15,10 @@ const windowExtraInputEl = document.getElementById("window-extra-input");
 const applyWindowExtraBtn = document.getElementById("apply-window-extra-btn");
 
 const primaryPreviewEl = document.getElementById("primary-preview");
+const primarySearchInputEl = document.getElementById("primary-search-input");
+const primarySearchPrevBtn = document.getElementById("primary-search-prev-btn");
+const primarySearchNextBtn = document.getElementById("primary-search-next-btn");
+const primarySearchCountEl = document.getElementById("primary-search-count");
 const secondaryInputEl = document.getElementById("secondary-input");
 const secondarySyncStatusEl = document.getElementById("secondary-sync-status");
 const compareDirectionButtonEls = Array.from(document.querySelectorAll(".compare-direction-btn"));
@@ -35,6 +39,9 @@ let editorState = null;
 let activeTab = "primary";
 let lastSearchTerm = "";
 let lastSearchIndex = -1;
+let primarySearchMatches = [];
+let primarySearchActiveIndex = -1;
+let primarySearchDebounceTimer = null;
 let secondaryAutoTimer = null;
 let activePreviewAnchorEl = null;
 let suppressSseUntilMs = 0;
@@ -543,6 +550,8 @@ function renderPrimaryPreview(state) {
   if (!html) {
     primaryPreviewEl.innerHTML = "<p class=\"muted\">Styled preview unavailable for this file.</p>";
     lastRenderedPrimaryPreviewHtml = html;
+    clearPrimarySearchHighlights();
+    updatePrimarySearchCount();
     return;
   }
 
@@ -557,6 +566,143 @@ function renderPrimaryPreview(state) {
   lastRenderedPrimaryPreviewHtml = html;
   rasterizePreviewCanvases();
   attachPreviewParagraphAnchors();
+  // Content was replaced wholesale, so re-highlight without jumping the viewport.
+  reapplyPrimarySearchHighlights();
+}
+
+function clearPrimarySearchHighlights() {
+  if (primaryPreviewEl) {
+    primaryPreviewEl.querySelectorAll("mark.primary-search-match").forEach((mark) => {
+      const parent = mark.parentNode;
+      if (!parent) {
+        return;
+      }
+      parent.replaceChild(document.createTextNode(mark.textContent), mark);
+      parent.normalize();
+    });
+  }
+
+  primarySearchMatches = [];
+  primarySearchActiveIndex = -1;
+}
+
+function updatePrimarySearchCount() {
+  if (!primarySearchCountEl) {
+    return;
+  }
+
+  primarySearchCountEl.textContent =
+    primarySearchMatches.length > 0 ? `${primarySearchActiveIndex + 1}/${primarySearchMatches.length}` : "0/0";
+}
+
+function applyPrimarySearchHighlights(term, options = {}) {
+  const { preserveActiveIndex = false, skipScroll = false } = options;
+  const previousActiveIndex = primarySearchActiveIndex;
+  clearPrimarySearchHighlights();
+
+  if (!primaryPreviewEl || !term) {
+    updatePrimarySearchCount();
+    return;
+  }
+
+  const lowerTerm = term.toLowerCase();
+  const walker = document.createTreeWalker(primaryPreviewEl, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue || !node.nodeValue.trim()) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      const parentTag = node.parentElement ? node.parentElement.tagName : "";
+      if (parentTag === "SCRIPT" || parentTag === "STYLE") {
+        return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  const textNodes = [];
+  let node;
+  while ((node = walker.nextNode())) {
+    textNodes.push(node);
+  }
+
+  textNodes.forEach((textNode) => {
+    const text = textNode.nodeValue;
+    const lowerText = text.toLowerCase();
+    if (!lowerText.includes(lowerTerm)) {
+      return;
+    }
+
+    const fragment = document.createDocumentFragment();
+    let cursor = 0;
+    let matchIndex = lowerText.indexOf(lowerTerm, cursor);
+    while (matchIndex !== -1) {
+      if (matchIndex > cursor) {
+        fragment.appendChild(document.createTextNode(text.slice(cursor, matchIndex)));
+      }
+
+      const mark = document.createElement("mark");
+      mark.className = "primary-search-match";
+      mark.textContent = text.slice(matchIndex, matchIndex + term.length);
+      fragment.appendChild(mark);
+      primarySearchMatches.push(mark);
+
+      cursor = matchIndex + term.length;
+      matchIndex = lowerText.indexOf(lowerTerm, cursor);
+    }
+
+    if (cursor < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+
+    textNode.parentNode.replaceChild(fragment, textNode);
+  });
+
+  if (primarySearchMatches.length === 0) {
+    updatePrimarySearchCount();
+    return;
+  }
+
+  const nextIndex = preserveActiveIndex && previousActiveIndex >= 0
+    ? Math.min(previousActiveIndex, primarySearchMatches.length - 1)
+    : 0;
+
+  primarySearchActiveIndex = nextIndex;
+  primarySearchMatches[nextIndex].classList.add("active");
+  updatePrimarySearchCount();
+
+  if (!skipScroll) {
+    primarySearchMatches[nextIndex].scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+}
+
+function reapplyPrimarySearchHighlights() {
+  if (!primarySearchInputEl) {
+    return;
+  }
+
+  const term = primarySearchInputEl.value.trim();
+  if (!term) {
+    clearPrimarySearchHighlights();
+    updatePrimarySearchCount();
+    return;
+  }
+
+  applyPrimarySearchHighlights(term, { preserveActiveIndex: true, skipScroll: true });
+}
+
+function focusPrimarySearchMatch(index) {
+  if (primarySearchMatches.length === 0) {
+    return;
+  }
+
+  primarySearchMatches.forEach((mark) => mark.classList.remove("active"));
+  const normalizedIndex = ((index % primarySearchMatches.length) + primarySearchMatches.length) % primarySearchMatches.length;
+  primarySearchActiveIndex = normalizedIndex;
+
+  const activeMark = primarySearchMatches[normalizedIndex];
+  activeMark.classList.add("active");
+  activeMark.scrollIntoView({ block: "center", behavior: "smooth" });
+  updatePrimarySearchCount();
 }
 
 function attachPreviewParagraphAnchors() {
@@ -939,6 +1085,42 @@ function setupSse() {
 refreshBtn.addEventListener("click", () => {
   forceRefresh().catch((error) => setError(error.message));
 });
+
+if (primarySearchInputEl) {
+  primarySearchInputEl.addEventListener("input", () => {
+    if (primarySearchDebounceTimer) {
+      window.clearTimeout(primarySearchDebounceTimer);
+    }
+
+    const term = primarySearchInputEl.value.trim();
+    primarySearchDebounceTimer = window.setTimeout(() => {
+      applyPrimarySearchHighlights(term);
+    }, 200);
+  });
+
+  primarySearchInputEl.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      focusPrimarySearchMatch(primarySearchActiveIndex + (event.shiftKey ? -1 : 1));
+    } else if (event.key === "Escape") {
+      primarySearchInputEl.value = "";
+      clearPrimarySearchHighlights();
+      updatePrimarySearchCount();
+    }
+  });
+}
+
+if (primarySearchNextBtn) {
+  primarySearchNextBtn.addEventListener("click", () => {
+    focusPrimarySearchMatch(primarySearchActiveIndex + 1);
+  });
+}
+
+if (primarySearchPrevBtn) {
+  primarySearchPrevBtn.addEventListener("click", () => {
+    focusPrimarySearchMatch(primarySearchActiveIndex - 1);
+  });
+}
 
 applySecondaryBtn.addEventListener("click", () => {
   applySecondaryText().catch((error) => setError(error.message));

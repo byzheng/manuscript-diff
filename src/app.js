@@ -161,6 +161,12 @@ function renderJobPage(jobId, pollFallbackMs) {
     <div class="workspace-grid">
       <section class="tab-panel active" id="panel-primary">
         <p class="muted">Primary manuscript reference view.</p>
+        <div class="primary-search-row">
+          <input id="primary-search-input" type="search" class="form-control form-control-sm primary-search-input" placeholder="Search primary text..." autocomplete="off" />
+          <button id="primary-search-prev-btn" type="button" class="btn btn-outline-secondary btn-sm" title="Previous match">&uarr;</button>
+          <button id="primary-search-next-btn" type="button" class="btn btn-outline-secondary btn-sm" title="Next match">&darr;</button>
+          <span id="primary-search-count" class="primary-search-count">0/0</span>
+        </div>
         <div id="primary-preview" class="primary-preview" hidden></div>
       </section>
 
