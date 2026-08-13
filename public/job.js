@@ -353,6 +353,14 @@ function navigateFromPreviewAnchor(anchor, options = {}) {
     return;
   }
 
+  const mappedIndex = Number(anchor.dataset.paragraphIndex);
+  if (Number.isInteger(mappedIndex) && mappedIndex >= 0) {
+    setError("");
+    markActivePreviewAnchor(anchor);
+    setStartParagraph(mappedIndex, options).catch((error) => setError(error.message));
+    return;
+  }
+
   const previewText = anchor.innerText || anchor.textContent || "";
   const index = findBestParagraphIndexFromPreviewText(previewText);
   if (!Number.isInteger(index) || index < 0) {
@@ -508,12 +516,14 @@ function renderPrimaryPreview(state) {
 }
 
 function attachPreviewParagraphAnchors() {
-  if (!primaryPreviewEl) {
+  if (!primaryPreviewEl || !editorState || !Array.isArray(editorState.paragraphs)) {
     return;
   }
 
   markActivePreviewAnchor(null);
 
+  const paragraphCount = editorState.paragraphs.length;
+  let nextGuessIndex = 0;
   const candidates = primaryPreviewEl.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li, blockquote");
   candidates.forEach((node) => {
     if (node.closest("table") || node.closest("figure")) {
@@ -523,6 +533,47 @@ function attachPreviewParagraphAnchors() {
     const text = String(node.textContent || "").trim();
     if (text.length < 8) {
       return;
+    }
+
+    // Prefer monotonic mapping to keep click -> paragraph selection stable.
+    let mappedIndex = -1;
+    const upperBound = Math.min(paragraphCount - 1, Math.max(nextGuessIndex + 24, 0));
+    const localSlice = editorState.paragraphs.slice(nextGuessIndex, upperBound + 1);
+    if (localSlice.length > 0) {
+      let bestLocal = { offset: -1, score: 0 };
+      const tokens = tokenisePreviewText(text).slice(0, 16);
+
+      for (let offset = 0; offset < localSlice.length; offset += 1) {
+        const candidateText = normalizePreviewText(localSlice[offset].text || "");
+        if (!candidateText) {
+          continue;
+        }
+
+        let overlap = 0;
+        for (const token of tokens) {
+          if (candidateText.includes(token)) {
+            overlap += 1;
+          }
+        }
+
+        const score = tokens.length > 0 ? overlap / tokens.length : 0;
+        if (score > bestLocal.score) {
+          bestLocal = { offset, score };
+        }
+      }
+
+      if (bestLocal.offset >= 0 && bestLocal.score >= 0.3) {
+        mappedIndex = nextGuessIndex + bestLocal.offset;
+      }
+    }
+
+    if (mappedIndex < 0) {
+      mappedIndex = findBestParagraphIndexFromPreviewText(text);
+    }
+
+    if (Number.isInteger(mappedIndex) && mappedIndex >= 0) {
+      node.dataset.paragraphIndex = String(mappedIndex);
+      nextGuessIndex = Math.min(paragraphCount - 1, Math.max(mappedIndex, nextGuessIndex));
     }
 
     node.classList.add("preview-anchor");
