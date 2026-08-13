@@ -523,13 +523,8 @@ button:hover {
   border-radius: 10px;
   border: 1px solid #dbe3ef;
   background: #fbfdff;
+  cursor: default;
   transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
-}
-
-.paragraph-item:hover {
-  background: #f2f7ff;
-  border-color: #c7d7ef;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
 }
 
 .paragraph-item.active {

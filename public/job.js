@@ -14,11 +14,7 @@ const applySecondaryBtn = document.getElementById("apply-secondary-btn");
 const windowExtraInputEl = document.getElementById("window-extra-input");
 const applyWindowExtraBtn = document.getElementById("apply-window-extra-btn");
 
-const paragraphListEl = document.getElementById("primary-paragraphs");
 const primaryPreviewEl = document.getElementById("primary-preview");
-const primaryViewButtonEls = Array.from(document.querySelectorAll(".primary-view-btn"));
-const paragraphSearchInputEl = document.getElementById("paragraph-search-input");
-const paragraphSearchBtn = document.getElementById("paragraph-search-btn");
 const secondaryInputEl = document.getElementById("secondary-input");
 const secondarySyncStatusEl = document.getElementById("secondary-sync-status");
 const compareDirectionButtonEls = Array.from(document.querySelectorAll(".compare-direction-btn"));
@@ -40,7 +36,6 @@ let activeTab = "primary";
 let lastSearchTerm = "";
 let lastSearchIndex = -1;
 let secondaryAutoTimer = null;
-let activePrimaryView = "paragraphs";
 let activePreviewAnchorEl = null;
 let suppressSseUntilMs = 0;
 let lastRenderedPrimaryPreviewHtml = null;
@@ -105,27 +100,6 @@ function resizeSecondaryInputToViewport() {
   secondaryInputEl.style.height = `${targetHeight}px`;
 }
 
-function setPrimaryView(nextView, options = {}) {
-  const { persist = true } = options;
-  activePrimaryView = nextView === "styled" ? "styled" : "paragraphs";
-
-  if (paragraphListEl) {
-    paragraphListEl.hidden = activePrimaryView !== "paragraphs";
-  }
-
-  if (primaryPreviewEl) {
-    primaryPreviewEl.hidden = activePrimaryView !== "styled";
-  }
-
-  primaryViewButtonEls.forEach((button) => {
-    button.classList.toggle("active", button.dataset.primaryView === activePrimaryView);
-  });
-
-  if (persist) {
-    patchPersistedEditorState({ primaryView: activePrimaryView });
-  }
-}
-
 function loadPersistedEditorState() {
   try {
     const raw = window.localStorage.getItem(editorStorageKey);
@@ -158,9 +132,6 @@ async function restorePersistedEditorState() {
   const saved = loadPersistedEditorState();
 
   applyCompareBoxWidth(saved.compareBoxWidth, { persist: false });
-  if (typeof saved.primaryView === "string") {
-    setPrimaryView(saved.primaryView, { persist: false });
-  }
 
   if (Number.isInteger(saved.startParagraph) && (!editorState || saved.startParagraph !== editorState.startParagraph)) {
     try {
@@ -375,12 +346,7 @@ function navigateFromPreviewAnchor(anchor, options = {}) {
 }
 
 function centerSelectedParagraphInViewport() {
-  if (!editorState || !Number.isInteger(editorState.startParagraph)) {
-    return;
-  }
-
-  const selected = paragraphListEl.querySelector(`.paragraph-item[data-index=\"${editorState.startParagraph}\"]`);
-  if (!selected) {
+  if (!primaryPreviewEl) {
     return;
   }
 
@@ -389,21 +355,20 @@ function centerSelectedParagraphInViewport() {
   const panelScrolls = panelStyle && (panelStyle.overflowY === "auto" || panelStyle.overflowY === "scroll");
 
   if (panelScrolls && primaryPanel) {
-    // Desktop split mode: scroll within the panel's own scrollable box.
     const panelRect = primaryPanel.getBoundingClientRect();
-    const itemRect = selected.getBoundingClientRect();
-    const offsetInPanel = itemRect.top - panelRect.top + primaryPanel.scrollTop;
-    const targetScroll = offsetInPanel - primaryPanel.clientHeight / 2 + itemRect.height / 2;
+    const previewRect = primaryPreviewEl.getBoundingClientRect();
+    const offsetInPanel = previewRect.top - panelRect.top + primaryPanel.scrollTop;
+    const targetScroll = offsetInPanel - primaryPanel.clientHeight / 2 + previewRect.height / 2;
     primaryPanel.scrollTo({ top: Math.max(0, targetScroll), behavior: "smooth" });
-  } else {
-    // Mobile / tab mode: scroll the window.
-    const header = document.querySelector(".top-menu");
-    const headerHeight = header ? header.getBoundingClientRect().height : 0;
-    const rect = selected.getBoundingClientRect();
-    const currentTop = window.scrollY || window.pageYOffset;
-    const targetTop = currentTop + rect.top - (window.innerHeight / 2) + (rect.height / 2) - (headerHeight / 2);
-    window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+    return;
   }
+
+  const header = document.querySelector(".top-menu");
+  const headerHeight = header ? header.getBoundingClientRect().height : 0;
+  const rect = primaryPreviewEl.getBoundingClientRect();
+  const currentTop = window.scrollY || window.pageYOffset;
+  const targetTop = currentTop + rect.top - (window.innerHeight / 2) + (rect.height / 2) - (headerHeight / 2);
+  window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
 }
 
 function setActiveTab(nextTab) {
@@ -447,52 +412,7 @@ function setActiveTab(nextTab) {
 }
 
 function renderParagraphs(state, options = {}) {
-  const { preferReuse = false } = options;
-  const rows = state.paragraphs || [];
-
-  if (preferReuse && paragraphListEl) {
-    const existingButtons = Array.from(paragraphListEl.querySelectorAll(".paragraph-item"));
-    if (existingButtons.length === rows.length) {
-      let reusable = true;
-      for (let i = 0; i < existingButtons.length; i += 1) {
-        if (Number(existingButtons[i].dataset.index) !== rows[i].index) {
-          reusable = false;
-          break;
-        }
-      }
-
-      if (reusable) {
-        existingButtons.forEach((button) => {
-          const index = Number(button.dataset.index);
-          button.classList.toggle("active", index === state.startParagraph);
-        });
-        return;
-      }
-    }
-  }
-
-  paragraphListEl.innerHTML = rows
-    .map((paragraph) => {
-      const activeClass = paragraph.index === state.startParagraph ? " active" : "";
-      const displayText = paragraph.text.length > 200 ? paragraph.text.slice(0, 200) + "\u2026" : paragraph.text;
-      return `<button type="button" class="paragraph-item${activeClass}" data-index="${paragraph.index}">
-        <span class="paragraph-index">${paragraph.index + 1}</span>
-        <span class="paragraph-text">${escapeHtml(displayText)}</span>
-      </button>`;
-    })
-    .join("");
-
-  paragraphListEl.querySelectorAll(".paragraph-item").forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = Number(button.dataset.index);
-      setStartParagraph(index, { openCompareTab: false }).catch((error) => setError(error.message));
-    });
-
-    button.addEventListener("dblclick", () => {
-      const index = Number(button.dataset.index);
-      setStartParagraph(index, { openCompareTab: true }).catch((error) => setError(error.message));
-    });
-  });
+  return;
 }
 
 function renderDiff(state) {
@@ -504,6 +424,8 @@ function renderPrimaryPreview(state) {
   if (!primaryPreviewEl) {
     return;
   }
+
+  primaryPreviewEl.hidden = false;
 
   const html = String((state && state.primaryPreviewHtml) || "").trim();
   if (!html) {
@@ -659,7 +581,6 @@ function renderState(state, options = {}) {
     });
   }
 
-  renderParagraphs(state, { preferReuse: preferParagraphReuse });
   if (!skipPreviewRender) {
     renderPrimaryPreview(state);
   }
@@ -731,8 +652,7 @@ async function setStartParagraph(index, options = {}) {
   });
 
   renderState(data.state, {
-    preferParagraphReuse: shouldPreserveViewport,
-    skipPreviewRender: shouldPreserveViewport && activePrimaryView === "styled",
+    skipPreviewRender: shouldPreserveViewport,
   });
 
   if (shouldPreserveViewport) {
@@ -786,44 +706,6 @@ async function setCompareDirection(compareDirection, options = {}) {
   }
 }
 
-function findNextParagraphByKeyword() {
-  if (!editorState || !Array.isArray(editorState.paragraphs) || editorState.paragraphs.length === 0) {
-    return;
-  }
-
-  const term = (paragraphSearchInputEl.value || "").trim().toLowerCase();
-  if (!term) {
-    setError("Enter a keyword to search.");
-    return;
-  }
-
-  const paragraphs = editorState.paragraphs;
-  if (term !== lastSearchTerm) {
-    lastSearchTerm = term;
-    lastSearchIndex = editorState.startParagraph;
-  }
-
-  const total = paragraphs.length;
-  for (let step = 1; step <= total; step += 1) {
-    const idx = (lastSearchIndex + step) % total;
-    const text = String(paragraphs[idx].text || "").toLowerCase();
-    if (text.includes(term)) {
-      lastSearchIndex = idx;
-
-      const btn = paragraphListEl.querySelector(`.paragraph-item[data-index=\"${idx}\"]`);
-      if (btn) {
-        btn.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-
-      setStartParagraph(idx, { openCompareTab: false }).catch((error) => setError(error.message));
-      setError("");
-      return;
-    }
-  }
-
-  setError(`No paragraph found for keyword: ${term}`);
-}
-
 async function applySecondaryText(options = {}) {
   const { openCompareTab = true, silent = false } = options;
 
@@ -848,7 +730,6 @@ async function applySecondaryText(options = {}) {
       secondaryText: secondaryInputEl.value,
     });
     renderState(data.state, {
-      preferParagraphReuse: true,
       skipPreviewRender: true,
     });
     patchPersistedEditorState({ secondaryText: data.state.secondaryText || "" });
@@ -956,17 +837,6 @@ windowExtraInputEl.addEventListener("keydown", (event) => {
   }
 });
 
-paragraphSearchBtn.addEventListener("click", () => {
-  findNextParagraphByKeyword();
-});
-
-paragraphSearchInputEl.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    findNextParagraphByKeyword();
-  }
-});
-
 diffModeButtonEls.forEach((button) => {
   button.addEventListener("click", () => {
     setDiffMode(button.dataset.diffMode, { openCompareTab: false }).catch((error) => setError(error.message));
@@ -982,12 +852,6 @@ compareDirectionButtonEls.forEach((button) => {
 tabButtons.forEach((button) => {
   button.addEventListener("click", () => {
     setActiveTab(button.dataset.tab);
-  });
-});
-
-primaryViewButtonEls.forEach((button) => {
-  button.addEventListener("click", () => {
-    setPrimaryView(button.dataset.primaryView);
   });
 });
 
@@ -1016,7 +880,6 @@ if (compareWidthInputEl) {
 
 async function initPage() {
   applyCompareBoxWidth(compareBoxWidthDefaultPct, { persist: false });
-  setPrimaryView("paragraphs", { persist: false });
   setActiveTab("primary");
   await fetchEditorState({ force: true });
   await restorePersistedEditorState();

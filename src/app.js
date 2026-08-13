@@ -142,10 +142,6 @@ function renderJobPage(jobId, pollFallbackMs) {
       </div>
 
       <div class="search-row mt-2 mt-lg-0 ms-lg-2">
-        <div class="input-group input-group-sm">
-          <input id="paragraph-search-input" class="paragraph-search-input form-control" type="text" placeholder="Search primary paragraphs" />
-          <button id="paragraph-search-btn" class="btn btn-outline-secondary" type="button">Search</button>
-        </div>
         <a class="btn btn-outline-secondary btn-sm help-btn" href="/help" aria-label="Help" title="Help"></a>
       </div>
     </header>
@@ -164,14 +160,7 @@ function renderJobPage(jobId, pollFallbackMs) {
 
     <div class="workspace-grid">
       <section class="tab-panel active" id="panel-primary">
-        <div class="primary-header-row">
-          <p class="muted">Click a paragraph to set the comparison starting point.</p>
-          <div class="primary-view-toggle" role="group" aria-label="Primary view mode">
-            <button class="primary-view-btn active" type="button" data-primary-view="paragraphs">Paragraph list</button>
-            <button class="primary-view-btn" type="button" data-primary-view="styled">Styled preview</button>
-          </div>
-        </div>
-        <div id="primary-paragraphs" class="paragraph-list"></div>
+        <p class="muted">Primary manuscript reference view.</p>
         <div id="primary-preview" class="primary-preview" hidden></div>
       </section>
 
