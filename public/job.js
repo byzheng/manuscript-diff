@@ -263,11 +263,25 @@ function capturePrimaryViewport() {
     return null;
   }
 
-  return {
+  const snapshot = {
     panelScrollTop: primaryPanel.scrollTop,
     windowScrollTop: window.scrollY || window.pageYOffset || 0,
     previewScrollTop: primaryPreviewEl ? primaryPreviewEl.scrollTop : 0,
+    anchorParagraphIndex: null,
+    anchorViewportOffset: null,
   };
+
+  // Anchor to the selected paragraph's on-screen position, since raw scrollTop
+  // drifts once reloaded content reflows to a different height.
+  if (activePreviewAnchorEl && primaryPreviewEl && primaryPreviewEl.contains(activePreviewAnchorEl)) {
+    const paragraphIndex = Number(activePreviewAnchorEl.dataset.paragraphIndex);
+    if (Number.isInteger(paragraphIndex)) {
+      snapshot.anchorParagraphIndex = paragraphIndex;
+      snapshot.anchorViewportOffset = activePreviewAnchorEl.getBoundingClientRect().top;
+    }
+  }
+
+  return snapshot;
 }
 
 function restorePrimaryViewport(snapshot) {
@@ -276,6 +290,30 @@ function restorePrimaryViewport(snapshot) {
   }
 
   const primaryPanel = tabPanels.primary;
+
+  if (Number.isInteger(snapshot.anchorParagraphIndex) && primaryPreviewEl) {
+    const selector = `.preview-anchor[data-paragraph-index="${snapshot.anchorParagraphIndex}"]`;
+    const anchor = primaryPreviewEl.querySelector(selector);
+    if (anchor) {
+      const delta = anchor.getBoundingClientRect().top - snapshot.anchorViewportOffset;
+      if (delta !== 0) {
+        if (primaryPreviewEl) {
+          primaryPreviewEl.scrollTop += delta;
+        }
+        if (primaryPanel) {
+          primaryPanel.scrollTop += delta;
+        }
+
+        const panelStyle = primaryPanel ? window.getComputedStyle(primaryPanel) : null;
+        const panelScrolls = panelStyle && (panelStyle.overflowY === "auto" || panelStyle.overflowY === "scroll");
+        if (!panelScrolls && activeTab === "primary") {
+          window.scrollBy({ top: delta, behavior: "auto" });
+        }
+      }
+      return;
+    }
+  }
+
   if (primaryPanel) {
     primaryPanel.scrollTop = snapshot.panelScrollTop;
   }
@@ -683,7 +721,15 @@ async function fetchEditorState(options = {}) {
   }
 
   const state = await response.json();
+  const viewportSnapshot = activeTab === "primary" ? capturePrimaryViewport() : null;
+
   renderState(state, renderOptions);
+
+  if (viewportSnapshot) {
+    window.requestAnimationFrame(() => {
+      restorePrimaryViewport(viewportSnapshot);
+    });
+  }
 }
 
 async function postJson(url, payload) {

@@ -16,11 +16,18 @@
   },
   "jobs": [
     {
+      "id": "merit-2026",
+      "name": "Merit 2026",
+      "primaryDocx": "C:/Users/zhe00a/OneDrive - CSIRO/Working/99-Other/028-Translation/2026/Merit-Zheng-2026.docx",
+      "secondaryText": "",
+      "outputDir": "./data/merit-2026"
+    },
+    {
       "id": "llm-apsim",
       "name": "LLM APSIM",
       "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/137-LLMAPSIM/llm-apsim.docx",
       "secondaryText": "",
-      "outputDir": "./data/canola-ofp"
+      "outputDir": "./data/llm-apsim"
     },
     {
       "id": "canola-ofp",
