@@ -714,17 +714,8 @@ function attachPreviewParagraphAnchors() {
 
   const paragraphCount = editorState.paragraphs.length;
   let nextGuessIndex = 0;
-  const candidates = primaryPreviewEl.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li, blockquote");
-  candidates.forEach((node) => {
-    if (node.closest("table") || node.closest("figure")) {
-      return;
-    }
 
-    const text = String(node.textContent || "").trim();
-    if (text.length < 8) {
-      return;
-    }
-
+  const mapTextToParagraphIndex = (text) => {
     // Prefer monotonic mapping to keep click -> paragraph selection stable.
     let mappedIndex = -1;
     const upperBound = Math.min(paragraphCount - 1, Math.max(nextGuessIndex + 24, 0));
@@ -761,6 +752,16 @@ function attachPreviewParagraphAnchors() {
       mappedIndex = findBestParagraphIndexFromPreviewText(text);
     }
 
+    return mappedIndex;
+  };
+
+  const markAnchor = (node, minLength) => {
+    const text = String(node.textContent || "").trim();
+    if (text.length < minLength) {
+      return;
+    }
+
+    const mappedIndex = mapTextToParagraphIndex(text);
     if (Number.isInteger(mappedIndex) && mappedIndex >= 0) {
       node.dataset.paragraphIndex = String(mappedIndex);
       nextGuessIndex = Math.min(paragraphCount - 1, Math.max(mappedIndex, nextGuessIndex));
@@ -768,6 +769,83 @@ function attachPreviewParagraphAnchors() {
 
     node.classList.add("preview-anchor");
     node.title = "Click to set start paragraph. Double-click to open Diff.";
+  };
+
+  const candidates = primaryPreviewEl.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li, blockquote");
+  candidates.forEach((node) => {
+    if (node.closest("table") || node.closest("figure")) {
+      return;
+    }
+
+    markAnchor(node, 8);
+  });
+
+  // Table cells are compared individually. Matching a single anchor cell can land on a
+  // duplicate value in the wrong row/column, so instead vote on the row/column offset
+  // using every distinguishable cell (matched independently of scan position) and use
+  // whichever offset the most cells agree on.
+  const tables = primaryPreviewEl.querySelectorAll("table");
+  tables.forEach((table) => {
+    const cells = Array.from(table.querySelectorAll("td, th"));
+    if (cells.length === 0) {
+      return;
+    }
+
+    // Empty cells never become paragraph entries in the extracted text, so they must be
+    // excluded from the sequential position count or every later cell would drift forward.
+    const textualCells = cells
+      .map((cell) => ({ cell, text: String(cell.textContent || "").trim() }))
+      .filter((entry) => entry.text.length > 0);
+
+    if (textualCells.length === 0) {
+      return;
+    }
+
+    const offsetVotes = new Map();
+    textualCells.forEach((entry, position) => {
+      if (entry.text.length < 3) {
+        return;
+      }
+
+      const globalIndex = findBestParagraphIndexFromPreviewText(entry.text);
+      if (!Number.isInteger(globalIndex) || globalIndex < 0) {
+        return;
+      }
+
+      const offset = globalIndex - position;
+      offsetVotes.set(offset, (offsetVotes.get(offset) || 0) + 1);
+    });
+
+    let bestOffset = null;
+    let bestVotes = 0;
+    offsetVotes.forEach((votes, offset) => {
+      if (votes > bestVotes) {
+        bestVotes = votes;
+        bestOffset = offset;
+      }
+    });
+
+    if (bestOffset === null) {
+      // No confident consensus for this table; fall back to per-cell best-effort matching.
+      textualCells.forEach((entry) => markAnchor(entry.cell, 1));
+      return;
+    }
+
+    let lastAssignedIndex = -1;
+    textualCells.forEach((entry, position) => {
+      const paragraphIndex = bestOffset + position;
+      if (paragraphIndex >= 0 && paragraphIndex < paragraphCount) {
+        entry.cell.dataset.paragraphIndex = String(paragraphIndex);
+        lastAssignedIndex = Math.max(lastAssignedIndex, paragraphIndex);
+      }
+
+      entry.cell.classList.add("preview-anchor");
+      entry.cell.title = "Click to set start paragraph. Double-click to open Diff.";
+    });
+
+    if (lastAssignedIndex >= 0) {
+      nextGuessIndex = Math.min(paragraphCount - 1, Math.max(nextGuessIndex, lastAssignedIndex));
+    }
   });
 
   syncActivePreviewAnchorWithState();
