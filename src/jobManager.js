@@ -1,9 +1,51 @@
 const fs = require("fs");
 const path = require("path");
 const chokidar = require("chokidar");
+const sanitizeHtml = require("sanitize-html");
 
-const { convertDocxToText } = require("./pandoc");
+const { convertDocxToText, runMammothHtml, withTempCopyOnPermission } = require("./pandoc");
 const { buildDiff, normaliseText, splitParagraphs } = require("./textUtils");
+
+function sanitisePrimaryPreviewHtml(inputHtml) {
+  return sanitizeHtml(String(inputHtml || ""), {
+    allowedTags: [
+      "p",
+      "br",
+      "strong",
+      "b",
+      "em",
+      "i",
+      "u",
+      "sup",
+      "sub",
+      "ul",
+      "ol",
+      "li",
+      "table",
+      "thead",
+      "tbody",
+      "tr",
+      "th",
+      "td",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "blockquote",
+      "hr",
+      "span",
+      "a",
+    ],
+    allowedAttributes: {
+      "*": ["colspan", "rowspan"],
+      a: ["href", "title"],
+    },
+    allowedSchemes: ["http", "https", "mailto"],
+    disallowedTagsMode: "discard",
+  });
+}
 
 class JobManager {
   constructor(config) {
@@ -27,6 +69,7 @@ class JobManager {
         updatedAt: null,
         primaryNormalized: "",
         primaryParagraphs: [],
+        primaryPreviewHtml: "",
         startParagraph: 0,
         diffMode: ["word", "hybrid", "char"].includes(jobConfig.diffMode) ? jobConfig.diffMode : "word",
         compareDirection:
@@ -144,6 +187,7 @@ class JobManager {
     this.emitUpdate(jobId);
 
     let primaryText = "";
+    let primaryPreviewHtml = "";
 
     try {
       primaryText = await convertDocxToText({
@@ -152,10 +196,21 @@ class JobManager {
         extraArgs: config.pandocArgs,
         conversionMode: config.conversionMode,
       });
+
+      try {
+        const rawPreviewHtml = await withTempCopyOnPermission(config.primaryDocx, (candidatePath) =>
+          runMammothHtml(candidatePath)
+        );
+        primaryPreviewHtml = sanitisePrimaryPreviewHtml(rawPreviewHtml);
+      } catch (_previewError) {
+        primaryPreviewHtml = "";
+      }
+
       const normalizedPrimary = normaliseText(primaryText, config.normalise || {});
       fs.writeFileSync(primaryTxtPath, normalizedPrimary, "utf8");
       job.primaryNormalized = normalizedPrimary;
       job.primaryParagraphs = splitParagraphs(normalizedPrimary);
+      job.primaryPreviewHtml = primaryPreviewHtml;
       if (job.startParagraph >= job.primaryParagraphs.length) {
         job.startParagraph = 0;
       }
@@ -395,6 +450,7 @@ class JobManager {
       secondaryParagraphCount: job.secondaryParagraphCount,
       compareRange: job.compareRange,
       paragraphs: job.primaryParagraphs.map((text, index) => ({ index, text })),
+      primaryPreviewHtml: job.primaryPreviewHtml || "",
       secondaryText: this.getSecondaryText(job),
       diff: {
         inlineHtml: job.diff.inlineHtml,

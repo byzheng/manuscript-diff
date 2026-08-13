@@ -164,8 +164,15 @@ function renderJobPage(jobId, pollFallbackMs) {
 
     <div class="workspace-grid">
       <section class="tab-panel active" id="panel-primary">
-        <p class="muted">Click a paragraph to set the comparison starting point.</p>
+        <div class="primary-header-row">
+          <p class="muted">Click a paragraph to set the comparison starting point.</p>
+          <div class="primary-view-toggle" role="group" aria-label="Primary view mode">
+            <button class="primary-view-btn active" type="button" data-primary-view="paragraphs">Paragraph list</button>
+            <button class="primary-view-btn" type="button" data-primary-view="styled">Styled preview</button>
+          </div>
+        </div>
         <div id="primary-paragraphs" class="paragraph-list"></div>
+        <div id="primary-preview" class="primary-preview" hidden></div>
       </section>
 
       <section class="tab-panel" id="panel-secondary">

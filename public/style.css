@@ -464,6 +464,50 @@ button:hover {
   font-family: "IBM Plex Sans", "Source Sans 3", "Segoe UI", sans-serif;
 }
 
+.primary-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.primary-header-row .muted {
+  margin: 0;
+}
+
+.primary-view-toggle {
+  display: inline-flex;
+  align-items: stretch;
+  background: #edf2fb;
+  border: 1px solid #cfdbef;
+  border-radius: 10px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.primary-view-btn {
+  border: none;
+  background: transparent;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 8px;
+}
+
+.primary-view-btn:hover {
+  background: #dde8f9;
+  color: #1e3a8a;
+}
+
+.primary-view-btn.active {
+  background: var(--menu-accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.25);
+}
+
 .paragraph-list {
   display: grid;
   gap: 8px;
@@ -502,6 +546,50 @@ button:hover {
 .paragraph-text {
   font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
   line-height: 1.55;
+}
+
+.primary-preview {
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 14px;
+  line-height: 1.6;
+  overflow: auto;
+  font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+}
+
+.primary-preview p,
+.primary-preview ul,
+.primary-preview ol,
+.primary-preview table,
+.primary-preview blockquote,
+.primary-preview h1,
+.primary-preview h2,
+.primary-preview h3,
+.primary-preview h4,
+.primary-preview h5,
+.primary-preview h6 {
+  margin-top: 0;
+  margin-bottom: 0.8rem;
+}
+
+.primary-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.primary-preview th,
+.primary-preview td {
+  border: 1px solid #cfd9e7;
+  padding: 6px 8px;
+  vertical-align: top;
+  white-space: normal;
+}
+
+.primary-preview thead th {
+  background: #eef4ff;
+  font-weight: 700;
 }
 
 .secondary-input {
@@ -745,6 +833,10 @@ button:hover {
 
   .diff-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .primary-header-row {
+    align-items: flex-start;
   }
 
   #panel-compare > #diff-wrap {

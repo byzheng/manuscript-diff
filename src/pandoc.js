@@ -51,6 +51,11 @@ async function runMammoth(inputPath) {
   return String(result.value || "").replace(/\r\n/g, "\n");
 }
 
+async function runMammothHtml(inputPath) {
+  const result = await mammoth.convertToHtml({ path: inputPath });
+  return String(result.value || "");
+}
+
 function isPermissionError(error) {
   const message = String(error && error.message ? error.message : "").toLowerCase();
   return message.includes("permission denied") || message.includes("eacces");
@@ -101,4 +106,6 @@ async function convertDocxToText({ pandocPath, inputPath, extraArgs, conversionM
 
 module.exports = {
   convertDocxToText,
+  runMammothHtml,
+  withTempCopyOnPermission,
 };

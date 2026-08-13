@@ -15,6 +15,8 @@ const windowExtraInputEl = document.getElementById("window-extra-input");
 const applyWindowExtraBtn = document.getElementById("apply-window-extra-btn");
 
 const paragraphListEl = document.getElementById("primary-paragraphs");
+const primaryPreviewEl = document.getElementById("primary-preview");
+const primaryViewButtonEls = Array.from(document.querySelectorAll(".primary-view-btn"));
 const paragraphSearchInputEl = document.getElementById("paragraph-search-input");
 const paragraphSearchBtn = document.getElementById("paragraph-search-btn");
 const secondaryInputEl = document.getElementById("secondary-input");
@@ -38,6 +40,7 @@ let activeTab = "primary";
 let lastSearchTerm = "";
 let lastSearchIndex = -1;
 let secondaryAutoTimer = null;
+let activePrimaryView = "paragraphs";
 const editorStorageKey = `manuscript-diff:${jobId}:editor`;
 const secondaryMinHeightPx = 280;
 const compareBoxWidthDefaultPct = 100;
@@ -99,6 +102,27 @@ function resizeSecondaryInputToViewport() {
   secondaryInputEl.style.height = `${targetHeight}px`;
 }
 
+function setPrimaryView(nextView, options = {}) {
+  const { persist = true } = options;
+  activePrimaryView = nextView === "styled" ? "styled" : "paragraphs";
+
+  if (paragraphListEl) {
+    paragraphListEl.hidden = activePrimaryView !== "paragraphs";
+  }
+
+  if (primaryPreviewEl) {
+    primaryPreviewEl.hidden = activePrimaryView !== "styled";
+  }
+
+  primaryViewButtonEls.forEach((button) => {
+    button.classList.toggle("active", button.dataset.primaryView === activePrimaryView);
+  });
+
+  if (persist) {
+    patchPersistedEditorState({ primaryView: activePrimaryView });
+  }
+}
+
 function loadPersistedEditorState() {
   try {
     const raw = window.localStorage.getItem(editorStorageKey);
@@ -131,6 +155,9 @@ async function restorePersistedEditorState() {
   const saved = loadPersistedEditorState();
 
   applyCompareBoxWidth(saved.compareBoxWidth, { persist: false });
+  if (typeof saved.primaryView === "string") {
+    setPrimaryView(saved.primaryView, { persist: false });
+  }
 
   if (Number.isInteger(saved.startParagraph) && (!editorState || saved.startParagraph !== editorState.startParagraph)) {
     try {
@@ -293,6 +320,20 @@ function renderDiff(state) {
   diffWrapEl.innerHTML = `<div class="diff">${diff.inlineHtml || ""}</div>`;
 }
 
+function renderPrimaryPreview(state) {
+  if (!primaryPreviewEl) {
+    return;
+  }
+
+  const html = String((state && state.primaryPreviewHtml) || "").trim();
+  if (!html) {
+    primaryPreviewEl.innerHTML = "<p class=\"muted\">Styled preview unavailable for this file.</p>";
+    return;
+  }
+
+  primaryPreviewEl.innerHTML = html;
+}
+
 function renderState(state) {
   editorState = state;
   document.getElementById("job-title").textContent = state.name || jobId;
@@ -331,6 +372,7 @@ function renderState(state) {
   }
 
   renderParagraphs(state);
+  renderPrimaryPreview(state);
   renderDiff(state);
 
   if (activeTab === "secondary") {
@@ -620,6 +662,12 @@ tabButtons.forEach((button) => {
   });
 });
 
+primaryViewButtonEls.forEach((button) => {
+  button.addEventListener("click", () => {
+    setPrimaryView(button.dataset.primaryView);
+  });
+});
+
 window.addEventListener("resize", () => {
   resizeSecondaryInputToViewport();
   applyCompareBoxWidth(compareWidthInputEl ? compareWidthInputEl.value : compareBoxWidthDefaultPct, { persist: false });
@@ -633,6 +681,7 @@ if (compareWidthInputEl) {
 
 async function initPage() {
   applyCompareBoxWidth(compareBoxWidthDefaultPct, { persist: false });
+  setPrimaryView("paragraphs", { persist: false });
   setActiveTab("primary");
   await fetchEditorState();
   await restorePersistedEditorState();
