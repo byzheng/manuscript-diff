@@ -16,6 +16,13 @@
   },
   "jobs": [
     {
+      "id": "llm-apsim",
+      "name": "LLM APSIM",
+      "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/137-LLMAPSIM/llm-apsim.docx",
+      "secondaryText": "",
+      "outputDir": "./data/canola-ofp"
+    },
+    {
       "id": "canola-ofp",
       "name": "Canola OFP",
       "primaryDocx": "C:/Users/zhe00a/OneDriveCSIRO/Working/02-Manuscript/134-CanolaOFP/CanolaOFP.docx",
