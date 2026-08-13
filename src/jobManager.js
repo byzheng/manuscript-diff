@@ -1,9 +1,99 @@
 const fs = require("fs");
 const path = require("path");
 const chokidar = require("chokidar");
+const sanitizeHtml = require("sanitize-html");
 
-const { convertDocxToText } = require("./pandoc");
+const { convertDocxToText, convertDocxToHtmlPreview, runMammothHtml, withTempCopyOnPermission } = require("./pandoc");
 const { buildDiff, normaliseText, splitParagraphs } = require("./textUtils");
+
+function sanitisePrimaryPreviewHtml(inputHtml) {
+  return sanitizeHtml(String(inputHtml || ""), {
+    allowedTags: [
+      "div",
+      "p",
+      "br",
+      "strong",
+      "b",
+      "em",
+      "i",
+      "u",
+      "sup",
+      "sub",
+      "ul",
+      "ol",
+      "li",
+      "table",
+      "thead",
+      "tbody",
+      "tr",
+      "th",
+      "td",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "blockquote",
+      "hr",
+      "span",
+      "a",
+      "figure",
+      "figcaption",
+      "pre",
+      "code",
+      "img",
+      "canvas",
+    ],
+    allowedAttributes: {
+      "*": ["colspan", "rowspan", "width", "height", "class"],
+      a: ["href", "title"],
+      img: ["src", "alt", "title", "width", "height"],
+      canvas: ["width", "height"],
+    },
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesByTag: {
+      img: ["http", "https", "data"],
+    },
+    disallowedTagsMode: "discard",
+  });
+}
+
+function scorePreviewHtml(previewHtml) {
+  const html = String(previewHtml || "").toLowerCase();
+  if (!html.trim()) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const scoreMatches = (pattern, weight) => ((html.match(pattern) || []).length || 0) * weight;
+
+  let score = 0;
+  score += scoreMatches(/<img\b/g, 6);
+  score += scoreMatches(/<figure\b/g, 4);
+  score += scoreMatches(/<svg\b/g, 4);
+  score += scoreMatches(/<table\b/g, 2);
+  score += scoreMatches(/<figcaption\b/g, 1);
+
+  score -= scoreMatches(/\[(drawing|shape|textbox|diagram|canvas)[^\]]*\]/g, 4);
+  score -= scoreMatches(/drawingml|v:shape|canvas text|textbox:/g, 3);
+
+  return score;
+}
+
+function pickBestPreviewHtml(candidates) {
+  let bestHtml = "";
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (const html of candidates) {
+    const score = scorePreviewHtml(html);
+    if (score > bestScore) {
+      bestScore = score;
+      bestHtml = html;
+    }
+  }
+
+  return bestHtml;
+}
 
 class JobManager {
   constructor(config) {
@@ -27,6 +117,7 @@ class JobManager {
         updatedAt: null,
         primaryNormalized: "",
         primaryParagraphs: [],
+        primaryPreviewHtml: "",
         startParagraph: 0,
         diffMode: ["word", "hybrid", "char"].includes(jobConfig.diffMode) ? jobConfig.diffMode : "word",
         compareDirection:
@@ -144,6 +235,7 @@ class JobManager {
     this.emitUpdate(jobId);
 
     let primaryText = "";
+    let primaryPreviewHtml = "";
 
     try {
       primaryText = await convertDocxToText({
@@ -152,10 +244,40 @@ class JobManager {
         extraArgs: config.pandocArgs,
         conversionMode: config.conversionMode,
       });
+
+      try {
+        let mammothPreviewHtml = "";
+        let pandocPreviewHtml = "";
+
+        try {
+          const rawMammothPreviewHtml = await withTempCopyOnPermission(config.primaryDocx, (candidatePath) =>
+            runMammothHtml(candidatePath)
+          );
+          mammothPreviewHtml = sanitisePrimaryPreviewHtml(rawMammothPreviewHtml);
+        } catch (_mammothPreviewError) {
+          mammothPreviewHtml = "";
+        }
+
+        try {
+          const rawPandocPreviewHtml = await convertDocxToHtmlPreview({
+            pandocPath: this.config.pandocPath,
+            inputPath: config.primaryDocx,
+          });
+          pandocPreviewHtml = sanitisePrimaryPreviewHtml(rawPandocPreviewHtml);
+        } catch (_pandocPreviewError) {
+          pandocPreviewHtml = "";
+        }
+
+        primaryPreviewHtml = pickBestPreviewHtml([mammothPreviewHtml, pandocPreviewHtml]);
+      } catch (_previewError) {
+        primaryPreviewHtml = "";
+      }
+
       const normalizedPrimary = normaliseText(primaryText, config.normalise || {});
       fs.writeFileSync(primaryTxtPath, normalizedPrimary, "utf8");
       job.primaryNormalized = normalizedPrimary;
       job.primaryParagraphs = splitParagraphs(normalizedPrimary);
+      job.primaryPreviewHtml = primaryPreviewHtml;
       if (job.startParagraph >= job.primaryParagraphs.length) {
         job.startParagraph = 0;
       }
@@ -395,6 +517,7 @@ class JobManager {
       secondaryParagraphCount: job.secondaryParagraphCount,
       compareRange: job.compareRange,
       paragraphs: job.primaryParagraphs.map((text, index) => ({ index, text })),
+      primaryPreviewHtml: job.primaryPreviewHtml || "",
       secondaryText: this.getSecondaryText(job),
       diff: {
         inlineHtml: job.diff.inlineHtml,

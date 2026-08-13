@@ -51,6 +51,21 @@ async function runMammoth(inputPath) {
   return String(result.value || "").replace(/\r\n/g, "\n");
 }
 
+async function runMammothHtml(inputPath) {
+  const result = await mammoth.convertToHtml({ path: inputPath });
+  return String(result.value || "");
+}
+
+function stripHtmlEnvelope(html) {
+  const input = String(html || "");
+  const bodyMatch = input.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyMatch && bodyMatch[1]) {
+    return bodyMatch[1];
+  }
+
+  return input;
+}
+
 function isPermissionError(error) {
   const message = String(error && error.message ? error.message : "").toLowerCase();
   return message.includes("permission denied") || message.includes("eacces");
@@ -99,6 +114,18 @@ async function convertDocxToText({ pandocPath, inputPath, extraArgs, conversionM
   }
 }
 
+async function convertDocxToHtmlPreview({ pandocPath, inputPath }) {
+  const previewArgs = ["-f", "docx", "-t", "html", "--embed-resources", "--standalone"];
+  const html = await withTempCopyOnPermission(inputPath, (candidatePath) =>
+    runPandoc({ pandocPath, inputPath: candidatePath, extraArgs: previewArgs })
+  );
+
+  return stripHtmlEnvelope(html);
+}
+
 module.exports = {
   convertDocxToText,
+  convertDocxToHtmlPreview,
+  runMammothHtml,
+  withTempCopyOnPermission,
 };

@@ -14,9 +14,7 @@ const applySecondaryBtn = document.getElementById("apply-secondary-btn");
 const windowExtraInputEl = document.getElementById("window-extra-input");
 const applyWindowExtraBtn = document.getElementById("apply-window-extra-btn");
 
-const paragraphListEl = document.getElementById("primary-paragraphs");
-const paragraphSearchInputEl = document.getElementById("paragraph-search-input");
-const paragraphSearchBtn = document.getElementById("paragraph-search-btn");
+const primaryPreviewEl = document.getElementById("primary-preview");
 const secondaryInputEl = document.getElementById("secondary-input");
 const secondarySyncStatusEl = document.getElementById("secondary-sync-status");
 const compareDirectionButtonEls = Array.from(document.querySelectorAll(".compare-direction-btn"));
@@ -38,6 +36,10 @@ let activeTab = "primary";
 let lastSearchTerm = "";
 let lastSearchIndex = -1;
 let secondaryAutoTimer = null;
+let activePreviewAnchorEl = null;
+let suppressSseUntilMs = 0;
+let lastRenderedPrimaryPreviewHtml = null;
+let primaryScrollPersistTimer = null;
 const editorStorageKey = `manuscript-diff:${jobId}:editor`;
 const secondaryMinHeightPx = 280;
 const compareBoxWidthDefaultPct = 100;
@@ -127,8 +129,49 @@ function patchPersistedEditorState(patch) {
   }
 }
 
+function persistPrimaryViewportPosition() {
+  const primaryPanel = tabPanels.primary;
+  patchPersistedEditorState({
+    primaryPreviewScrollTop: primaryPreviewEl ? primaryPreviewEl.scrollTop : 0,
+    primaryPanelScrollTop: primaryPanel ? primaryPanel.scrollTop : 0,
+    primaryWindowScrollY: window.scrollY || window.pageYOffset || 0,
+  });
+}
+
+function schedulePersistPrimaryViewportPosition() {
+  if (primaryScrollPersistTimer) {
+    window.clearTimeout(primaryScrollPersistTimer);
+  }
+
+  primaryScrollPersistTimer = window.setTimeout(() => {
+    primaryScrollPersistTimer = null;
+    persistPrimaryViewportPosition();
+  }, 120);
+}
+
+function restorePrimaryViewportPosition(saved) {
+  const primaryPanel = tabPanels.primary;
+
+  if (primaryPreviewEl && Number.isFinite(Number(saved.primaryPreviewScrollTop))) {
+    primaryPreviewEl.scrollTop = Number(saved.primaryPreviewScrollTop);
+  }
+
+  if (primaryPanel && Number.isFinite(Number(saved.primaryPanelScrollTop))) {
+    primaryPanel.scrollTop = Number(saved.primaryPanelScrollTop);
+  }
+
+  if (Number.isFinite(Number(saved.primaryWindowScrollY))) {
+    const panelStyle = primaryPanel ? window.getComputedStyle(primaryPanel) : null;
+    const panelScrolls = panelStyle && (panelStyle.overflowY === "auto" || panelStyle.overflowY === "scroll");
+    if (!panelScrolls && activeTab === "primary") {
+      window.scrollTo({ top: Number(saved.primaryWindowScrollY), behavior: "auto" });
+    }
+  }
+}
+
 async function restorePersistedEditorState() {
   const saved = loadPersistedEditorState();
+  let restoredViewport = false;
 
   applyCompareBoxWidth(saved.compareBoxWidth, { persist: false });
 
@@ -165,6 +208,22 @@ async function restorePersistedEditorState() {
       // Ignore stale values from older versions.
     }
   }
+
+  if (
+    saved &&
+    (saved.primaryPreviewScrollTop !== undefined ||
+      saved.primaryPanelScrollTop !== undefined ||
+      saved.primaryWindowScrollY !== undefined)
+  ) {
+    window.setTimeout(() => {
+      restorePrimaryViewportPosition(saved);
+    }, 0);
+    restoredViewport = true;
+  }
+
+  return {
+    restoredViewport,
+  };
 }
 
 function setSecondarySyncStatus(text, type) {
@@ -190,13 +249,178 @@ function setError(message) {
   errorEl.textContent = message ? `Error: ${escapeHtml(message)}` : "";
 }
 
-function centerSelectedParagraphInViewport() {
-  if (!editorState || !Number.isInteger(editorState.startParagraph)) {
+function suppressImmediateSseRerender(durationMs = 1000) {
+  suppressSseUntilMs = Date.now() + Math.max(0, Number(durationMs) || 0);
+}
+
+function isSseSuppressed() {
+  return Date.now() < suppressSseUntilMs;
+}
+
+function capturePrimaryViewport() {
+  const primaryPanel = tabPanels.primary;
+  if (!primaryPanel) {
+    return null;
+  }
+
+  return {
+    panelScrollTop: primaryPanel.scrollTop,
+    windowScrollTop: window.scrollY || window.pageYOffset || 0,
+    previewScrollTop: primaryPreviewEl ? primaryPreviewEl.scrollTop : 0,
+  };
+}
+
+function restorePrimaryViewport(snapshot) {
+  if (!snapshot) {
     return;
   }
 
-  const selected = paragraphListEl.querySelector(`.paragraph-item[data-index=\"${editorState.startParagraph}\"]`);
-  if (!selected) {
+  const primaryPanel = tabPanels.primary;
+  if (primaryPanel) {
+    primaryPanel.scrollTop = snapshot.panelScrollTop;
+  }
+
+  if (primaryPreviewEl) {
+    primaryPreviewEl.scrollTop = snapshot.previewScrollTop;
+  }
+
+  const panelStyle = primaryPanel ? window.getComputedStyle(primaryPanel) : null;
+  const panelScrolls = panelStyle && (panelStyle.overflowY === "auto" || panelStyle.overflowY === "scroll");
+  if (!panelScrolls && activeTab === "primary") {
+    window.scrollTo({ top: snapshot.windowScrollTop, behavior: "auto" });
+  }
+}
+
+function normalizePreviewText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenisePreviewText(text) {
+  return normalizePreviewText(text)
+    .split(" ")
+    .filter((token) => token.length > 2);
+}
+
+function findBestParagraphIndexFromPreviewText(previewText) {
+  if (!editorState || !Array.isArray(editorState.paragraphs) || editorState.paragraphs.length === 0) {
+    return -1;
+  }
+
+  const snippet = normalizePreviewText(previewText);
+  if (!snippet) {
+    return -1;
+  }
+
+  const paragraphs = editorState.paragraphs;
+  if (snippet.length >= 24) {
+    for (let i = 0; i < paragraphs.length; i += 1) {
+      const paragraphText = normalizePreviewText(paragraphs[i].text || "");
+      if (paragraphText.includes(snippet) || snippet.includes(paragraphText)) {
+        return i;
+      }
+    }
+  }
+
+  const tokens = tokenisePreviewText(snippet).slice(0, 16);
+  if (tokens.length === 0) {
+    return -1;
+  }
+
+  let best = { index: -1, score: 0 };
+  for (let i = 0; i < paragraphs.length; i += 1) {
+    const paragraphText = normalizePreviewText(paragraphs[i].text || "");
+    if (!paragraphText) {
+      continue;
+    }
+
+    let overlap = 0;
+    for (const token of tokens) {
+      if (paragraphText.includes(token)) {
+        overlap += 1;
+      }
+    }
+
+    const score = overlap / tokens.length;
+    if (score > best.score) {
+      best = { index: i, score };
+    }
+  }
+
+  return best.score >= 0.34 ? best.index : -1;
+}
+
+function markActivePreviewAnchor(anchor) {
+  if (activePreviewAnchorEl && activePreviewAnchorEl !== anchor) {
+    activePreviewAnchorEl.classList.remove("active");
+  }
+
+  activePreviewAnchorEl = anchor || null;
+  if (activePreviewAnchorEl) {
+    activePreviewAnchorEl.classList.add("active");
+  }
+}
+
+function syncActivePreviewAnchorWithState() {
+  if (!primaryPreviewEl || !editorState || !Number.isInteger(editorState.startParagraph)) {
+    markActivePreviewAnchor(null);
+    return;
+  }
+
+  const selector = `.preview-anchor[data-paragraph-index="${editorState.startParagraph}"]`;
+  const mappedAnchor = primaryPreviewEl.querySelector(selector);
+  if (mappedAnchor) {
+    markActivePreviewAnchor(mappedAnchor);
+    return;
+  }
+
+  markActivePreviewAnchor(null);
+}
+
+function getPreviewAnchorFromTarget(target) {
+  if (!primaryPreviewEl || !target) {
+    return null;
+  }
+
+  const anchor = target.closest(".preview-anchor");
+  if (!anchor || !primaryPreviewEl.contains(anchor)) {
+    return null;
+  }
+
+  return anchor;
+}
+
+function navigateFromPreviewAnchor(anchor, options = {}) {
+  if (!anchor) {
+    return;
+  }
+
+  const mappedIndex = Number(anchor.dataset.paragraphIndex);
+  if (Number.isInteger(mappedIndex) && mappedIndex >= 0) {
+    setError("");
+    markActivePreviewAnchor(anchor);
+    setStartParagraph(mappedIndex, options).catch((error) => setError(error.message));
+    return;
+  }
+
+  const previewText = anchor.innerText || anchor.textContent || "";
+  const index = findBestParagraphIndexFromPreviewText(previewText);
+  if (!Number.isInteger(index) || index < 0) {
+    setError("Unable to map this preview paragraph to a primary paragraph.");
+    return;
+  }
+
+  setError("");
+  markActivePreviewAnchor(anchor);
+  setStartParagraph(index, options).catch((error) => setError(error.message));
+}
+
+function centerSelectedParagraphInViewport() {
+  if (!primaryPreviewEl) {
     return;
   }
 
@@ -205,21 +429,20 @@ function centerSelectedParagraphInViewport() {
   const panelScrolls = panelStyle && (panelStyle.overflowY === "auto" || panelStyle.overflowY === "scroll");
 
   if (panelScrolls && primaryPanel) {
-    // Desktop split mode: scroll within the panel's own scrollable box.
     const panelRect = primaryPanel.getBoundingClientRect();
-    const itemRect = selected.getBoundingClientRect();
-    const offsetInPanel = itemRect.top - panelRect.top + primaryPanel.scrollTop;
-    const targetScroll = offsetInPanel - primaryPanel.clientHeight / 2 + itemRect.height / 2;
+    const previewRect = primaryPreviewEl.getBoundingClientRect();
+    const offsetInPanel = previewRect.top - panelRect.top + primaryPanel.scrollTop;
+    const targetScroll = offsetInPanel - primaryPanel.clientHeight / 2 + previewRect.height / 2;
     primaryPanel.scrollTo({ top: Math.max(0, targetScroll), behavior: "smooth" });
-  } else {
-    // Mobile / tab mode: scroll the window.
-    const header = document.querySelector(".top-menu");
-    const headerHeight = header ? header.getBoundingClientRect().height : 0;
-    const rect = selected.getBoundingClientRect();
-    const currentTop = window.scrollY || window.pageYOffset;
-    const targetTop = currentTop + rect.top - (window.innerHeight / 2) + (rect.height / 2) - (headerHeight / 2);
-    window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+    return;
   }
+
+  const header = document.querySelector(".top-menu");
+  const headerHeight = header ? header.getBoundingClientRect().height : 0;
+  const rect = primaryPreviewEl.getBoundingClientRect();
+  const currentTop = window.scrollY || window.pageYOffset;
+  const targetTop = currentTop + rect.top - (window.innerHeight / 2) + (rect.height / 2) - (headerHeight / 2);
+  window.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
 }
 
 function setActiveTab(nextTab) {
@@ -262,30 +485,8 @@ function setActiveTab(nextTab) {
   }
 }
 
-function renderParagraphs(state) {
-  const rows = state.paragraphs || [];
-  paragraphListEl.innerHTML = rows
-    .map((paragraph) => {
-      const activeClass = paragraph.index === state.startParagraph ? " active" : "";
-      const displayText = paragraph.text.length > 200 ? paragraph.text.slice(0, 200) + "\u2026" : paragraph.text;
-      return `<button type="button" class="paragraph-item${activeClass}" data-index="${paragraph.index}">
-        <span class="paragraph-index">${paragraph.index + 1}</span>
-        <span class="paragraph-text">${escapeHtml(displayText)}</span>
-      </button>`;
-    })
-    .join("");
-
-  paragraphListEl.querySelectorAll(".paragraph-item").forEach((button) => {
-    button.addEventListener("click", () => {
-      const index = Number(button.dataset.index);
-      setStartParagraph(index, { openCompareTab: false }).catch((error) => setError(error.message));
-    });
-
-    button.addEventListener("dblclick", () => {
-      const index = Number(button.dataset.index);
-      setStartParagraph(index, { openCompareTab: true }).catch((error) => setError(error.message));
-    });
-  });
+function renderParagraphs(state, options = {}) {
+  return;
 }
 
 function renderDiff(state) {
@@ -293,7 +494,133 @@ function renderDiff(state) {
   diffWrapEl.innerHTML = `<div class="diff">${diff.inlineHtml || ""}</div>`;
 }
 
-function renderState(state) {
+function renderPrimaryPreview(state) {
+  if (!primaryPreviewEl) {
+    return;
+  }
+
+  primaryPreviewEl.hidden = false;
+
+  const html = String((state && state.primaryPreviewHtml) || "").trim();
+  if (!html) {
+    primaryPreviewEl.innerHTML = "<p class=\"muted\">Styled preview unavailable for this file.</p>";
+    lastRenderedPrimaryPreviewHtml = html;
+    return;
+  }
+
+  if (lastRenderedPrimaryPreviewHtml === html && primaryPreviewEl.innerHTML) {
+    if (!primaryPreviewEl.hidden) {
+      attachPreviewParagraphAnchors();
+    }
+    return;
+  }
+
+  primaryPreviewEl.innerHTML = html;
+  lastRenderedPrimaryPreviewHtml = html;
+  rasterizePreviewCanvases();
+  attachPreviewParagraphAnchors();
+}
+
+function attachPreviewParagraphAnchors() {
+  if (!primaryPreviewEl || !editorState || !Array.isArray(editorState.paragraphs)) {
+    return;
+  }
+
+  markActivePreviewAnchor(null);
+
+  const paragraphCount = editorState.paragraphs.length;
+  let nextGuessIndex = 0;
+  const candidates = primaryPreviewEl.querySelectorAll("p, h1, h2, h3, h4, h5, h6, li, blockquote");
+  candidates.forEach((node) => {
+    if (node.closest("table") || node.closest("figure")) {
+      return;
+    }
+
+    const text = String(node.textContent || "").trim();
+    if (text.length < 8) {
+      return;
+    }
+
+    // Prefer monotonic mapping to keep click -> paragraph selection stable.
+    let mappedIndex = -1;
+    const upperBound = Math.min(paragraphCount - 1, Math.max(nextGuessIndex + 24, 0));
+    const localSlice = editorState.paragraphs.slice(nextGuessIndex, upperBound + 1);
+    if (localSlice.length > 0) {
+      let bestLocal = { offset: -1, score: 0 };
+      const tokens = tokenisePreviewText(text).slice(0, 16);
+
+      for (let offset = 0; offset < localSlice.length; offset += 1) {
+        const candidateText = normalizePreviewText(localSlice[offset].text || "");
+        if (!candidateText) {
+          continue;
+        }
+
+        let overlap = 0;
+        for (const token of tokens) {
+          if (candidateText.includes(token)) {
+            overlap += 1;
+          }
+        }
+
+        const score = tokens.length > 0 ? overlap / tokens.length : 0;
+        if (score > bestLocal.score) {
+          bestLocal = { offset, score };
+        }
+      }
+
+      if (bestLocal.offset >= 0 && bestLocal.score >= 0.3) {
+        mappedIndex = nextGuessIndex + bestLocal.offset;
+      }
+    }
+
+    if (mappedIndex < 0) {
+      mappedIndex = findBestParagraphIndexFromPreviewText(text);
+    }
+
+    if (Number.isInteger(mappedIndex) && mappedIndex >= 0) {
+      node.dataset.paragraphIndex = String(mappedIndex);
+      nextGuessIndex = Math.min(paragraphCount - 1, Math.max(mappedIndex, nextGuessIndex));
+    }
+
+    node.classList.add("preview-anchor");
+    node.title = "Click to set start paragraph. Double-click to open Diff.";
+  });
+
+  syncActivePreviewAnchorWithState();
+}
+
+function rasterizePreviewCanvases() {
+  if (!primaryPreviewEl) {
+    return;
+  }
+
+  const canvases = Array.from(primaryPreviewEl.querySelectorAll("canvas"));
+  canvases.forEach((canvas, index) => {
+    try {
+      const dataUrl = canvas.toDataURL("image/png");
+      const image = document.createElement("img");
+      image.src = dataUrl;
+      image.alt = canvas.getAttribute("aria-label") || `Diagram ${index + 1}`;
+      image.className = "primary-preview-rasterized";
+
+      const width = Number(canvas.getAttribute("width"));
+      const height = Number(canvas.getAttribute("height"));
+      if (Number.isFinite(width) && width > 0) {
+        image.width = width;
+      }
+      if (Number.isFinite(height) && height > 0) {
+        image.height = height;
+      }
+
+      canvas.replaceWith(image);
+    } catch (_error) {
+      // Keep original canvas if conversion fails.
+    }
+  });
+}
+
+function renderState(state, options = {}) {
+  const { preferParagraphReuse = false, skipPreviewRender = false } = options;
   editorState = state;
   document.getElementById("job-title").textContent = state.name || jobId;
   setStatus(state.status);
@@ -330,7 +657,11 @@ function renderState(state) {
     });
   }
 
-  renderParagraphs(state);
+  if (!skipPreviewRender) {
+    renderPrimaryPreview(state);
+  } else {
+    syncActivePreviewAnchorWithState();
+  }
   renderDiff(state);
 
   if (activeTab === "secondary") {
@@ -340,14 +671,19 @@ function renderState(state) {
   }
 }
 
-async function fetchEditorState() {
+async function fetchEditorState(options = {}) {
+  const { force = false, renderOptions = {} } = options;
+  if (!force && isSseSuppressed()) {
+    return;
+  }
+
   const response = await fetch(`/api/job/${encodeURIComponent(jobId)}/editor-state`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load editor state: ${response.status}`);
   }
 
   const state = await response.json();
-  renderState(state);
+  renderState(state, renderOptions);
 }
 
 async function postJson(url, payload) {
@@ -373,7 +709,7 @@ async function forceRefresh() {
 
   try {
     await postJson(`/api/job/${encodeURIComponent(jobId)}/refresh`, {});
-    await fetchEditorState();
+    await fetchEditorState({ force: true });
   } finally {
     refreshBtn.disabled = false;
     refreshBtn.textContent = original;
@@ -382,12 +718,30 @@ async function forceRefresh() {
 
 async function setStartParagraph(index, options = {}) {
   const { openCompareTab = true } = options;
+  const shouldPreserveViewport = !openCompareTab && activeTab === "primary";
+  const viewportSnapshot = shouldPreserveViewport ? capturePrimaryViewport() : null;
+
+  if (shouldPreserveViewport) {
+    suppressImmediateSseRerender(1200);
+  }
+
   const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/start`, {
     startParagraph: index,
   });
 
-  renderState(data.state);
+  renderState(data.state, {
+    skipPreviewRender: shouldPreserveViewport,
+  });
+
+  if (shouldPreserveViewport) {
+    // Wait one frame so refreshed DOM measurements/scroll boxes are applied.
+    window.requestAnimationFrame(() => {
+      restorePrimaryViewport(viewportSnapshot);
+    });
+  }
+
   patchPersistedEditorState({ startParagraph: data.state.startParagraph });
+  persistPrimaryViewportPosition();
   if (openCompareTab) {
     setActiveTab("compare");
   }
@@ -431,46 +785,10 @@ async function setCompareDirection(compareDirection, options = {}) {
   }
 }
 
-function findNextParagraphByKeyword() {
-  if (!editorState || !Array.isArray(editorState.paragraphs) || editorState.paragraphs.length === 0) {
-    return;
-  }
-
-  const term = (paragraphSearchInputEl.value || "").trim().toLowerCase();
-  if (!term) {
-    setError("Enter a keyword to search.");
-    return;
-  }
-
-  const paragraphs = editorState.paragraphs;
-  if (term !== lastSearchTerm) {
-    lastSearchTerm = term;
-    lastSearchIndex = editorState.startParagraph;
-  }
-
-  const total = paragraphs.length;
-  for (let step = 1; step <= total; step += 1) {
-    const idx = (lastSearchIndex + step) % total;
-    const text = String(paragraphs[idx].text || "").toLowerCase();
-    if (text.includes(term)) {
-      lastSearchIndex = idx;
-
-      const btn = paragraphListEl.querySelector(`.paragraph-item[data-index=\"${idx}\"]`);
-      if (btn) {
-        btn.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-
-      setStartParagraph(idx, { openCompareTab: false }).catch((error) => setError(error.message));
-      setError("");
-      return;
-    }
-  }
-
-  setError(`No paragraph found for keyword: ${term}`);
-}
-
 async function applySecondaryText(options = {}) {
   const { openCompareTab = true, silent = false } = options;
+
+  suppressImmediateSseRerender(2000);
 
   if (editorState && secondaryInputEl.value === (editorState.secondaryText || "")) {
     setSecondarySyncStatus("Synced", "ok");
@@ -490,7 +808,9 @@ async function applySecondaryText(options = {}) {
     const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/secondary`, {
       secondaryText: secondaryInputEl.value,
     });
-    renderState(data.state);
+    renderState(data.state, {
+      skipPreviewRender: true,
+    });
     patchPersistedEditorState({ secondaryText: data.state.secondaryText || "" });
     setSecondarySyncStatus("Synced", "ok");
     if (openCompareTab) {
@@ -548,6 +868,10 @@ function setupSse() {
         return;
       }
 
+      if (isSseSuppressed()) {
+        return;
+      }
+
       fetchEditorState().catch((error) => setError(error.message));
     } catch (error) {
       setError(error.message);
@@ -575,6 +899,7 @@ applySecondaryBtn.addEventListener("click", () => {
 });
 
 secondaryInputEl.addEventListener("input", () => {
+  suppressImmediateSseRerender(2500);
   patchPersistedEditorState({ secondaryText: secondaryInputEl.value });
   setSecondarySyncStatus("Pending changes...", "pending");
   scheduleSecondaryAutoApply();
@@ -588,17 +913,6 @@ windowExtraInputEl.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
     applyWindowExtra().catch((error) => setError(error.message));
-  }
-});
-
-paragraphSearchBtn.addEventListener("click", () => {
-  findNextParagraphByKeyword();
-});
-
-paragraphSearchInputEl.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    findNextParagraphByKeyword();
   }
 });
 
@@ -620,6 +934,28 @@ tabButtons.forEach((button) => {
   });
 });
 
+if (primaryPreviewEl) {
+  primaryPreviewEl.addEventListener("click", (event) => {
+    const anchor = getPreviewAnchorFromTarget(event.target);
+    navigateFromPreviewAnchor(anchor, { openCompareTab: false });
+  });
+
+  primaryPreviewEl.addEventListener("dblclick", (event) => {
+    const anchor = getPreviewAnchorFromTarget(event.target);
+    navigateFromPreviewAnchor(anchor, { openCompareTab: true });
+  });
+
+  primaryPreviewEl.addEventListener("scroll", () => {
+    schedulePersistPrimaryViewportPosition();
+  });
+}
+
+window.addEventListener("scroll", () => {
+  if (activeTab === "primary") {
+    schedulePersistPrimaryViewportPosition();
+  }
+});
+
 window.addEventListener("resize", () => {
   resizeSecondaryInputToViewport();
   applyCompareBoxWidth(compareWidthInputEl ? compareWidthInputEl.value : compareBoxWidthDefaultPct, { persist: false });
@@ -634,11 +970,13 @@ if (compareWidthInputEl) {
 async function initPage() {
   applyCompareBoxWidth(compareBoxWidthDefaultPct, { persist: false });
   setActiveTab("primary");
-  await fetchEditorState();
-  await restorePersistedEditorState();
-  window.setTimeout(() => {
-    centerSelectedParagraphInViewport();
-  }, 0);
+  await fetchEditorState({ force: true });
+  const restoreResult = await restorePersistedEditorState();
+  if (!restoreResult || !restoreResult.restoredViewport) {
+    window.setTimeout(() => {
+      centerSelectedParagraphInViewport();
+    }, 0);
+  }
 
   if (!setupSse()) {
     window.setInterval(() => {
