@@ -43,6 +43,7 @@ let secondaryAutoTimer = null;
 let activePrimaryView = "paragraphs";
 let activePreviewAnchorEl = null;
 let suppressSseUntilMs = 0;
+let lastRenderedPrimaryPreviewHtml = null;
 const editorStorageKey = `manuscript-diff:${jobId}:editor`;
 const secondaryMinHeightPx = 280;
 const compareBoxWidthDefaultPct = 100;
@@ -507,10 +508,19 @@ function renderPrimaryPreview(state) {
   const html = String((state && state.primaryPreviewHtml) || "").trim();
   if (!html) {
     primaryPreviewEl.innerHTML = "<p class=\"muted\">Styled preview unavailable for this file.</p>";
+    lastRenderedPrimaryPreviewHtml = html;
+    return;
+  }
+
+  if (lastRenderedPrimaryPreviewHtml === html && primaryPreviewEl.innerHTML) {
+    if (!primaryPreviewEl.hidden) {
+      attachPreviewParagraphAnchors();
+    }
     return;
   }
 
   primaryPreviewEl.innerHTML = html;
+  lastRenderedPrimaryPreviewHtml = html;
   rasterizePreviewCanvases();
   attachPreviewParagraphAnchors();
 }
