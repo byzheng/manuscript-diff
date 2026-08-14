@@ -412,6 +412,26 @@ async function createApp() {
     }
   });
 
+  app.post("/api/job/:id/select-table-cell", async (req, res) => {
+    const job = runtime.manager.getJob(req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Unknown job id" });
+      return;
+    }
+
+    try {
+      await runtime.manager.setPrimaryCellSelection(
+        req.params.id,
+        req.body.tableIndex,
+        req.body.rowIndex,
+        req.body.colIndex
+      );
+      res.json({ ok: true, state: runtime.manager.getEditorState(req.params.id) });
+    } catch (error) {
+      res.status(400).json({ error: error.message || "Failed to select table cell" });
+    }
+  });
+
   app.post("/api/job/:id/secondary", async (req, res) => {
     const job = runtime.manager.getJob(req.params.id);
     if (!job) {

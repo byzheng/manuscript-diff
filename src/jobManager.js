@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const chokidar = require("chokidar");
 const sanitizeHtml = require("sanitize-html");
+const { parseDocument } = require("htmlparser2");
 
 const { convertDocxToText, convertDocxToHtmlPreview, runMammothHtml, withTempCopyOnPermission } = require("./pandoc");
 const { buildDiff, normaliseText, splitParagraphs } = require("./textUtils");
@@ -95,6 +96,97 @@ function pickBestPreviewHtml(candidates) {
   return bestHtml;
 }
 
+function getDirectChildTags(el, tagNames) {
+  return (el.children || []).filter((child) => child.type === "tag" && tagNames.includes(child.name));
+}
+
+function getElementText(el) {
+  let result = "";
+  for (const child of el.children || []) {
+    if (child.type === "text") {
+      result += child.data;
+    } else if (child.type === "tag") {
+      result += child.name === "br" ? " " : getElementText(child);
+    }
+  }
+  return result;
+}
+
+function collectCellParagraphTexts(cellEl) {
+  const texts = [];
+
+  const walk = (node) => {
+    for (const child of node.children || []) {
+      // Nested tables (rare) are ignored so their paragraphs don't bleed into this cell.
+      if (child.type !== "tag" || child.name === "table") {
+        continue;
+      }
+
+      if (child.name === "p") {
+        const text = getElementText(child).replace(/\s+/g, " ").trim();
+        if (text) {
+          texts.push(text);
+        }
+        continue;
+      }
+
+      walk(child);
+    }
+  };
+
+  walk(cellEl);
+
+  if (texts.length > 0) {
+    return texts;
+  }
+
+  const wholeText = getElementText(cellEl).replace(/\s+/g, " ").trim();
+  return wholeText ? [wholeText] : [];
+}
+
+function getTableRows(tableEl) {
+  const directRows = getDirectChildTags(tableEl, ["tr"]);
+  if (directRows.length > 0) {
+    return directRows;
+  }
+
+  const sections = getDirectChildTags(tableEl, ["thead", "tbody", "tfoot"]);
+  return sections.flatMap((section) => getDirectChildTags(section, ["tr"]));
+}
+
+function findTableElements(node, results) {
+  for (const child of node.children || []) {
+    if (child.type !== "tag") {
+      continue;
+    }
+
+    if (child.name === "table") {
+      results.push(child);
+      continue;
+    }
+
+    findTableElements(child, results);
+  }
+}
+
+// Extracts the exact per-cell paragraph text from the same HTML the browser renders, so a
+// clicked <tr>/<td> can be identified by its structural position instead of fuzzy text matching.
+function extractPrimaryTables(html) {
+  if (!html) {
+    return [];
+  }
+
+  const dom = parseDocument(String(html));
+  const tableEls = [];
+  findTableElements(dom, tableEls);
+
+  return tableEls.map((tableEl) =>
+    getTableRows(tableEl).map((rowEl) =>
+      getDirectChildTags(rowEl, ["td", "th"]).map((cellEl) => collectCellParagraphTexts(cellEl))
+    )
+  );
+}
+
 class JobManager {
   constructor(config) {
     this.config = config;
@@ -118,11 +210,14 @@ class JobManager {
         primaryNormalized: "",
         primaryParagraphs: [],
         primaryPreviewHtml: "",
+        primaryTables: [],
         startParagraph: 0,
         diffMode: ["word", "hybrid", "char"].includes(jobConfig.diffMode) ? jobConfig.diffMode : "word",
         compareDirection:
           jobConfig.compareDirection === "primary-to-secondary" ? "primary-to-secondary" : "secondary-to-primary",
         windowExtra: Number.isInteger(jobConfig.windowExtra) ? jobConfig.windowExtra : 0,
+        primarySelectionOverride: null,
+        selectedTableCell: null,
         secondaryParagraphCount: 0,
         compareRange: { start: 0, end: -1, count: 0 },
         secondaryOverride: null,
@@ -278,6 +373,10 @@ class JobManager {
       job.primaryNormalized = normalizedPrimary;
       job.primaryParagraphs = splitParagraphs(normalizedPrimary);
       job.primaryPreviewHtml = primaryPreviewHtml;
+      job.primaryTables = extractPrimaryTables(primaryPreviewHtml);
+      // Preview content just changed, so any previously selected table cell is no longer valid.
+      job.primarySelectionOverride = null;
+      job.selectedTableCell = null;
       if (job.startParagraph >= job.primaryParagraphs.length) {
         job.startParagraph = 0;
       }
@@ -332,6 +431,24 @@ class JobManager {
     const normalisedSecondary = normaliseText(String(secondaryText || ""), job.config.normalise || {});
     const secondaryParagraphs = splitParagraphs(normalisedSecondary);
     const secondaryParagraphCount = secondaryParagraphs.length;
+
+    // A selected table cell is compared using its exact extracted text directly, bypassing
+    // the paragraph-index range below entirely (no fuzzy matching involved).
+    if (typeof job.primarySelectionOverride === "string" && job.primarySelectionOverride.length > 0) {
+      const selectedPrimary = job.primarySelectionOverride;
+      const diff = buildDiff(selectedPrimary, secondaryText, {
+        normalise: job.config.normalise || {},
+        compareMode: "full",
+        diffMode: job.diffMode,
+        compareDirection: job.compareDirection,
+      });
+
+      return {
+        diff,
+        secondaryParagraphCount,
+        compareRange: { start: -1, end: -1, count: splitParagraphs(selectedPrimary).length },
+      };
+    }
 
     const totalPrimary = job.primaryParagraphs.length;
     const safeStart = Math.min(Math.max(0, job.startParagraph), Math.max(0, totalPrimary - 1));
@@ -398,7 +515,27 @@ class JobManager {
     }
 
     job.startParagraph = next;
+    job.primarySelectionOverride = null;
+    job.selectedTableCell = null;
     await this.compareOnly(jobId, "set-start-paragraph");
+  }
+
+  async setPrimaryCellSelection(jobId, tableIndex, rowIndex, colIndex) {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      throw new Error("Unknown job id");
+    }
+
+    const table = Array.isArray(job.primaryTables) ? job.primaryTables[Number(tableIndex)] : null;
+    const row = Array.isArray(table) ? table[Number(rowIndex)] : null;
+    const cell = Array.isArray(row) ? row[Number(colIndex)] : null;
+    if (!Array.isArray(cell) || cell.length === 0) {
+      throw new Error("Unknown table cell");
+    }
+
+    job.primarySelectionOverride = cell.join("\n\n");
+    job.selectedTableCell = { tableIndex: Number(tableIndex), rowIndex: Number(rowIndex), colIndex: Number(colIndex) };
+    await this.compareOnly(jobId, "set-primary-cell-selection");
   }
 
   async setSecondaryText(jobId, text) {
@@ -514,6 +651,7 @@ class JobManager {
       diffMode: job.diffMode,
       compareDirection: job.compareDirection,
       windowExtra: job.windowExtra,
+      selectedTableCell: job.selectedTableCell || null,
       secondaryParagraphCount: job.secondaryParagraphCount,
       compareRange: job.compareRange,
       paragraphs: job.primaryParagraphs.map((text, index) => ({ index, text })),

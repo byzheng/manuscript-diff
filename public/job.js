@@ -411,16 +411,28 @@ function markActivePreviewAnchor(anchor) {
 }
 
 function syncActivePreviewAnchorWithState() {
-  if (!primaryPreviewEl || !editorState || !Number.isInteger(editorState.startParagraph)) {
+  if (!primaryPreviewEl || !editorState) {
     markActivePreviewAnchor(null);
     return;
   }
 
-  const selector = `.preview-anchor[data-paragraph-index="${editorState.startParagraph}"]`;
-  const mappedAnchor = primaryPreviewEl.querySelector(selector);
-  if (mappedAnchor) {
-    markActivePreviewAnchor(mappedAnchor);
-    return;
+  if (editorState.selectedTableCell) {
+    const { tableIndex, rowIndex, colIndex } = editorState.selectedTableCell;
+    const selector = `.preview-anchor[data-table-index="${tableIndex}"][data-row-index="${rowIndex}"][data-col-index="${colIndex}"]`;
+    const mappedAnchor = primaryPreviewEl.querySelector(selector);
+    if (mappedAnchor) {
+      markActivePreviewAnchor(mappedAnchor);
+      return;
+    }
+  }
+
+  if (Number.isInteger(editorState.startParagraph)) {
+    const selector = `.preview-anchor[data-paragraph-index="${editorState.startParagraph}"]`;
+    const mappedAnchor = primaryPreviewEl.querySelector(selector);
+    if (mappedAnchor) {
+      markActivePreviewAnchor(mappedAnchor);
+      return;
+    }
   }
 
   markActivePreviewAnchor(null);
@@ -441,6 +453,16 @@ function getPreviewAnchorFromTarget(target) {
 
 function navigateFromPreviewAnchor(anchor, options = {}) {
   if (!anchor) {
+    return;
+  }
+
+  if (anchor.dataset.tableIndex !== undefined) {
+    const tableIndex = Number(anchor.dataset.tableIndex);
+    const rowIndex = Number(anchor.dataset.rowIndex);
+    const colIndex = Number(anchor.dataset.colIndex);
+    setError("");
+    markActivePreviewAnchor(anchor);
+    selectPrimaryTableCell(tableIndex, rowIndex, colIndex, options).catch((error) => setError(error.message));
     return;
   }
 
@@ -780,72 +802,44 @@ function attachPreviewParagraphAnchors() {
     markAnchor(node, 8);
   });
 
-  // Table cells are compared individually. Matching a single anchor cell can land on a
-  // duplicate value in the wrong row/column, so instead vote on the row/column offset
-  // using every distinguishable cell (matched independently of scan position) and use
-  // whichever offset the most cells agree on.
-  const tables = primaryPreviewEl.querySelectorAll("table");
-  tables.forEach((table) => {
-    const cells = Array.from(table.querySelectorAll("td, th"));
-    if (cells.length === 0) {
-      return;
-    }
-
-    // Empty cells never become paragraph entries in the extracted text, so they must be
-    // excluded from the sequential position count or every later cell would drift forward.
-    const textualCells = cells
-      .map((cell) => ({ cell, text: String(cell.textContent || "").trim() }))
-      .filter((entry) => entry.text.length > 0);
-
-    if (textualCells.length === 0) {
-      return;
-    }
-
-    const offsetVotes = new Map();
-    textualCells.forEach((entry, position) => {
-      if (entry.text.length < 3) {
-        return;
+  // Table cells are identified by their exact row/column position within the same HTML the
+  // server parsed, so the server can return that cell's authoritative extracted text directly
+  // instead of trying to fuzzy-match it against the plain-text paragraph list.
+  const isNestedWithin = (el, container) => {
+    let ancestor = el.parentElement;
+    while (ancestor && ancestor !== container) {
+      if (ancestor.tagName === "TABLE") {
+        return true;
       }
+      ancestor = ancestor.parentElement;
+    }
+    return false;
+  };
 
-      const globalIndex = findBestParagraphIndexFromPreviewText(entry.text);
-      if (!Number.isInteger(globalIndex) || globalIndex < 0) {
-        return;
-      }
+  const topLevelTables = Array.from(primaryPreviewEl.querySelectorAll("table")).filter(
+    (table) => !isNestedWithin(table, primaryPreviewEl)
+  );
 
-      const offset = globalIndex - position;
-      offsetVotes.set(offset, (offsetVotes.get(offset) || 0) + 1);
+  topLevelTables.forEach((table, tableIndex) => {
+    const rows = Array.from(table.querySelectorAll("tr")).filter((row) => !isNestedWithin(row, table));
+    rows.forEach((row, rowIndex) => {
+      const cells = Array.from(row.children).filter(
+        (child) => child.tagName === "TD" || child.tagName === "TH"
+      );
+
+      cells.forEach((cell, colIndex) => {
+        const text = String(cell.textContent || "").trim();
+        if (!text) {
+          return;
+        }
+
+        cell.classList.add("preview-anchor");
+        cell.dataset.tableIndex = String(tableIndex);
+        cell.dataset.rowIndex = String(rowIndex);
+        cell.dataset.colIndex = String(colIndex);
+        cell.title = "Click to select this cell for comparison. Double-click to open Diff.";
+      });
     });
-
-    let bestOffset = null;
-    let bestVotes = 0;
-    offsetVotes.forEach((votes, offset) => {
-      if (votes > bestVotes) {
-        bestVotes = votes;
-        bestOffset = offset;
-      }
-    });
-
-    if (bestOffset === null) {
-      // No confident consensus for this table; fall back to per-cell best-effort matching.
-      textualCells.forEach((entry) => markAnchor(entry.cell, 1));
-      return;
-    }
-
-    let lastAssignedIndex = -1;
-    textualCells.forEach((entry, position) => {
-      const paragraphIndex = bestOffset + position;
-      if (paragraphIndex >= 0 && paragraphIndex < paragraphCount) {
-        entry.cell.dataset.paragraphIndex = String(paragraphIndex);
-        lastAssignedIndex = Math.max(lastAssignedIndex, paragraphIndex);
-      }
-
-      entry.cell.classList.add("preview-anchor");
-      entry.cell.title = "Click to set start paragraph. Double-click to open Diff.";
-    });
-
-    if (lastAssignedIndex >= 0) {
-      nextGuessIndex = Math.min(paragraphCount - 1, Math.max(nextGuessIndex, lastAssignedIndex));
-    }
   });
 
   syncActivePreviewAnchorWithState();
@@ -1005,6 +999,40 @@ async function setStartParagraph(index, options = {}) {
 
   if (shouldPreserveViewport) {
     // Wait one frame so refreshed DOM measurements/scroll boxes are applied.
+    window.requestAnimationFrame(() => {
+      restorePrimaryViewport(viewportSnapshot);
+    });
+  }
+
+  patchPersistedEditorState({ startParagraph: data.state.startParagraph });
+  persistPrimaryViewportPosition();
+  if (openCompareTab) {
+    setActiveTab("compare");
+  }
+}
+
+// A selected table cell is compared using its exact extracted text, identified by its
+// structural row/column position rather than a fuzzy paragraph-index match.
+async function selectPrimaryTableCell(tableIndex, rowIndex, colIndex, options = {}) {
+  const { openCompareTab = true } = options;
+  const shouldPreserveViewport = !openCompareTab && activeTab === "primary";
+  const viewportSnapshot = shouldPreserveViewport ? capturePrimaryViewport() : null;
+
+  if (shouldPreserveViewport) {
+    suppressImmediateSseRerender(1200);
+  }
+
+  const data = await postJson(`/api/job/${encodeURIComponent(jobId)}/select-table-cell`, {
+    tableIndex,
+    rowIndex,
+    colIndex,
+  });
+
+  renderState(data.state, {
+    skipPreviewRender: shouldPreserveViewport,
+  });
+
+  if (shouldPreserveViewport) {
     window.requestAnimationFrame(() => {
       restorePrimaryViewport(viewportSnapshot);
     });
