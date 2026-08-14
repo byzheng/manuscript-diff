@@ -114,6 +114,7 @@ function getElementText(el) {
 
 function collectCellParagraphTexts(cellEl) {
   const texts = [];
+  const paragraphLikeTags = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"];
 
   const walk = (node) => {
     for (const child of node.children || []) {
@@ -122,7 +123,7 @@ function collectCellParagraphTexts(cellEl) {
         continue;
       }
 
-      if (child.name === "p") {
+      if (paragraphLikeTags.includes(child.name)) {
         const text = getElementText(child).replace(/\s+/g, " ").trim();
         if (text) {
           texts.push(text);
